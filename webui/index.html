@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>k9x HIL — Case Management</title>
+  <link rel="stylesheet" href="/static/app.css?v=7" />
+  <script src="/static/app.js?v=7" defer></script>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">◇</span>
+      <span class="brand-text">k9x <strong>HIL</strong></span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">
+        <span class="nav-icon">▣</span> Dashboard
+      </button>
+      <button class="nav-item" id="nav-alltasks" onclick="switchTab('alltasks')">
+        <span class="nav-icon">▤</span> All Tasks
+        <span class="nav-badge" id="badge-mytasks" style="display:none">0</span>
+      </button>
+      <button class="nav-item" id="nav-queues" onclick="switchTab('queues')">
+        <span class="nav-icon">◫</span> Queues
+      </button>
+    </nav>
+
+    <!-- Application tabs — dynamically populated per user -->
+    <div id="app-tabs"></div>
+
+    <!-- Sidebar descriptions -->
+    <div class="sidebar-desc" id="sidebar-dashboard">
+      <div class="sidebar-desc-title">Dashboard</div>
+      <div class="sidebar-desc-body">Overview of all HIL tasks — pending, active, escalated, and completed.</div>
+    </div>
+    <div class="sidebar-desc" id="sidebar-mytasks" style="display:none">
+      <div class="sidebar-desc-title">My Tasks</div>
+      <div class="sidebar-desc-body">Tasks assigned to you. Claim, start, complete, or escalate.</div>
+    </div>
+    <div class="sidebar-desc" id="sidebar-alltasks" style="display:none">
+      <div class="sidebar-desc-title">All Tasks</div>
+      <div class="sidebar-desc-body">Full view of all tasks across all users and queues.</div>
+    </div>
+    <div class="sidebar-desc" id="sidebar-queues" style="display:none">
+      <div class="sidebar-desc-title">Queues</div>
+      <div class="sidebar-desc-body">Kafka topic queues — tasks grouped by source workflow.</div>
+    </div>
+
+    <!-- Administration — admin only -->
+    <div class="sidebar-admin" id="sidebar-admin-section" style="display:none">
+      <nav class="sidebar-nav" style="padding-top:0">
+        <button class="nav-item" id="nav-admin" onclick="switchTab('admin')">
+          <span class="nav-icon">⊛</span> Administration
+        </button>
+      </nav>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-text">k9x HIL Case Management</div>
+      <div class="sidebar-footer-sub">Event-driven · Kafka-native</div>
+    </div>
+  </aside>
+
+  <!-- Main area -->
+  <main class="main">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">
+        <span id="header-tab-title">Dashboard</span>
+      </div>
+      <div class="header-actions">
+        <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
+        <div class="user-chip" id="user-chip" style="display:none" onclick="toggleUserMenu()">
+          <span class="user-avatar" id="user-avatar">R</span>
+          <span class="user-name" id="user-name">User</span>
+        </div>
+        <div class="user-menu" id="user-menu" style="display:none">
+          <div class="user-menu-email" id="user-menu-email"></div>
+          <div class="user-menu-role" id="user-menu-role"></div>
+          <button class="user-menu-btn" onclick="logout()">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Login panel -->
+    <div class="panel active" id="panel-login">
+      <div class="login-card">
+        <div class="login-brand">◇ k9x <strong>HIL</strong></div>
+        <div class="login-subtitle">Case Management System</div>
+        <form onsubmit="doLogin(event)">
+          <input type="email" id="login-email" placeholder="Email" required />
+          <input type="password" id="login-pass" placeholder="Password" required />
+          <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+          <div class="login-error" id="login-error"></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard panel -->
+    <div class="panel" id="panel-dashboard">
+      <div class="stat-cards" id="stat-cards"></div>
+      <div class="section-title" style="margin-top:24px">Recent Activity</div>
+      <div class="task-list" id="recent-tasks"></div>
+    </div>
+
+    <!-- My Tasks panel -->
+    <div class="panel" id="panel-mytasks">
+      <div class="task-filters" id="mytask-filters"></div>
+      <div class="task-list" id="mytask-list"></div>
+    </div>
+
+    <!-- All Tasks panel -->
+    <div class="panel" id="panel-alltasks">
+      <div class="task-filters" id="alltask-filters"></div>
+      <div class="task-list" id="alltask-list"></div>
+    </div>
+
+    <!-- Queues panel -->
+    <div class="panel" id="panel-queues">
+      <div class="queue-grid" id="queue-grid"></div>
+    </div>
+
+    <!-- Admin: Landing -->
+    <div class="panel" id="panel-admin">
+      <div id="admin-landing"></div>
+    </div>
+
+    <!-- Admin: sub-panels -->
+    <div class="panel" id="panel-admin-iam"><div class="admin-back" onclick="switchTab('admin')">← Administration</div><div id="admin-iam-content"></div></div>
+    <div class="panel" id="panel-admin-projects"><div class="admin-back" onclick="switchTab('admin')">← Administration</div><div id="admin-projects-content"></div></div>
+    <div class="panel" id="panel-admin-policies"><div class="admin-back" onclick="switchTab('admin')">← Administration</div><div id="admin-policies-content"></div></div>
+    <div class="panel" id="panel-admin-rules"><div class="admin-back" onclick="switchTab('admin')">← Administration</div><div id="admin-rules-content"></div></div>
+    <div class="panel" id="panel-admin-queues"><div class="admin-back" onclick="switchTab('admin')">← Administration</div><div id="admin-queues-content"></div></div>
+    <div class="panel" id="panel-admin-audit"><div class="admin-back" onclick="switchTab('admin')">← Administration</div><div id="admin-audit-content"></div></div>
+
+    <!-- Task detail modal -->
+    <div class="modal-overlay" id="task-modal" style="display:none" onclick="closeModal(event)">
+      <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="modal-title" id="modal-title"></span>
+          <button class="modal-close" onclick="closeTaskModal()">✕</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

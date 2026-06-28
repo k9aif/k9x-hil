@@ -1,0 +1,29 @@
+# K9X HIL — Human-in-the-Loop Case Management
+# Single container, no pod needed.
+#
+# Build:
+#   podman build -t k9x-hil:latest -f RHEL/Containerfile .
+#
+# Run:
+#   podman run -d --name k9x-hil -p 8086:8086 --env-file .env k9x-hil:latest
+
+FROM registry.access.redhat.com/ubi9/python-311:latest
+
+USER root
+RUN dnf install -y --nodocs libpq-devel && dnf clean all
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8086
+
+USER 1001
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8086", "--log-level", "info"]

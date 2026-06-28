@@ -1,0 +1,121 @@
+@startuml hil_lifecycle
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam activityBackgroundColor #EEF2FF
+skinparam activityBorderColor #6366F1
+skinparam arrowColor #6366F1
+skinparam noteBorderColor #94A3B8
+skinparam noteBackgroundColor #F8FAFC
+
+title k9x HIL — Lifecycle Flow\nDesign → Configure → Implement → Runtime
+
+|#EEF2FF| Architect (Studio) |
+start
+:Architect opens **k9x Studio**;
+:Designs agentic workflow on canvas;
+:Identifies decision points requiring\nhuman judgment (**Discernment**);
+:Drops **HIL Orchestrator** from palette;
+note right
+  Studio suggests where HIL
+  is needed based on 4Ds analysis.
+  Architect can move, delete,
+  or override suggestions.
+end note
+:Defines HIL topics on canvas\ne.g. workflow.hil.{project}.{app}.{queue};
+:Generates scaffold with\n**BaseHILOrchestrator** wired in;
+
+|#FEF3C7| Admin (k9x-HIL Platform) |
+:Admin logs into **k9x-HIL** admin panel;
+:Creates **Project**;
+:Registers **Application(s)** under Project;
+:Defines **Queues** per Application\nwith Kafka topic mappings;
+note right
+  Queue = Kafka topic (1:1)
+  workflow.hil.eoc.claims.document-review
+  workflow.hil.eoc.claims.escalations
+end note
+:Assigns **Users/Groups** to Applications\n(IAM: who sees what);
+:Sets policies per Queue\n- TTL, default action on expiry\n- PII handling rules\n- Required role/group;
+
+|#D1FAE5| Solutions Architect (Implementation) |
+:SA takes scaffold from Studio;
+:Implements agent business logic;
+:Wires orchestrator to publish to\nKafka HIL topics matching admin config;
+:Configures **reply_to** topic\nfor response routing;
+:Implements **HILOrchestrator**\nsubscribing to response topic;
+note right
+  Inbound message schema:
+  - correlation_id, reply_to
+  - title, description, priority
+  - ttl_hours, ttl_action
+  - pii, pii_fields
+  - payload, artifacts
+  - required_role, required_group
+end note
+:Deploys to runtime environment;
+
+|#E0E7FF| Runtime (k9x-HIL + Kafka) |
+:Agent executes, reaches HIL gate;
+:Orchestrator publishes task to\n**workflow.hil.{project}.{app}.{queue}**;
+:k9x-HIL consumer picks up message;
+:Task created, routed to correct\nProject → Application → Queue;
+:Task assigned to user/group\n(auto or pool-based);
+
+|#FEF3C7| Worker (k9x-HIL UI) |
+:Worker logs in;
+:Sees Application tabs with\nassigned tasks;
+:Opens task — views description,\npayload, artifacts;
+if (PII flagged?) then (yes)
+  :Masked fields shown\nAudit log on view;
+else (no)
+endif
+:Reviews, adds comments;
+
+if (Decision?) then (Complete)
+  :Provides decision + comment;
+  :Status → **completed**;
+elseif (Escalate) then
+  :Escalates to manager;
+  :Status → **escalated**;
+elseif (Reject) then
+  :Rejects with reason;
+  :Status → **rejected**;
+else (No action — TTL expires)
+  :System performs **ttl_action**\n(reject / approve / escalate / expire);
+  note right
+    auto: true in response
+    so caller knows it was
+    a timeout, not human
+  end note
+endif
+
+|#E0E7FF| Runtime (k9x-HIL + Kafka) |
+:k9x-HIL publishes response to\n**reply_to** topic;
+note right
+  Response schema:
+  - correlation_id, task_id
+  - action, actor, auto
+  - decision, comment
+  - completed_at
+end note
+:HILOrchestrator consumes response;
+:Resumes downstream agents\nwith human decision in context;
+
+stop
+
+legend right
+  **k9x HIL — Roles**
+  Architect: Designs where HIL happens (Studio)
+  Admin: Configures projects, apps, queues, IAM
+  SA: Implements and wires Kafka topics
+  Worker: Performs human tasks at runtime
+  ----
+  **Principles**
+  - Event-driven, fully decoupled
+  - Topic = Queue (1:1 mapping)
+  - Caller owns the contract (schema in message)
+  - Framework-agnostic (any Kafka producer)
+  - TTL enforced, PII-aware, audit-logged
+endlegend
+
+@enduml
