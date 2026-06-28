@@ -27,17 +27,14 @@ case "$cmd" in
     ;;
 
   start)
+    ENV_FILE="$PROJECT_DIR/.env"
     echo "Starting $CONTAINER on port 8086 ..."
     sudo podman rm -f "$CONTAINER" 2>/dev/null || true
     sudo podman run -d \
       --name "$CONTAINER" \
       -p 8086:8086 \
       --add-host rhel-host:192.168.1.98 \
-      -e POSTGRES_HOST=rhel-host \
-      -e POSTGRES_PORT=5432 \
-      -e POSTGRES_USER=postgres \
-      -e POSTGRES_DB=k9hil \
-      -e K9_PG_PASSWORD=postgres \
+      --env-file "$ENV_FILE" \
       "$IMAGE"
     echo ""
     HOST_IP=$(hostname -I | awk '{print $1}')
