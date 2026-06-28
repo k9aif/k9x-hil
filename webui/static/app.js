@@ -82,7 +82,7 @@ function buildAppTabs() {
   Object.keys(byProject).forEach(proj => {
     const lbl = document.createElement("div");
     lbl.className = "nav-project-label";
-    lbl.textContent = proj;
+    lbl.innerHTML = `<span style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Project:</span> ${esc(proj)}`;
     nav.appendChild(lbl);
 
     byProject[proj].forEach(a => {
