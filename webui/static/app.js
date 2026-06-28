@@ -80,10 +80,15 @@ function buildAppTabs() {
   });
 
   Object.keys(byProject).forEach(proj => {
-    const lbl = document.createElement("div");
-    lbl.className = "nav-project-label";
-    lbl.innerHTML = `<span style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Project:</span> ${esc(proj)}`;
-    nav.appendChild(lbl);
+    const projLbl = document.createElement("div");
+    projLbl.className = "nav-project-label";
+    projLbl.innerHTML = `<span style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Project:</span> ${esc(proj)}`;
+    nav.appendChild(projLbl);
+
+    const appLbl = document.createElement("div");
+    appLbl.style.cssText = "font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;padding:4px 16px 2px;";
+    appLbl.textContent = "Applications";
+    nav.appendChild(appLbl);
 
     byProject[proj].forEach(a => {
       const btn = document.createElement("button");
