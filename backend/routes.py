@@ -6,6 +6,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction
+from backend.auth import create_access_token, get_current_user, require_admin
 
 router = APIRouter(prefix="/api")
 
@@ -24,14 +25,15 @@ def login(req: LoginReq, db: Session = Depends(get_db)):
         raise HTTPException(401, "Invalid credentials")
     apps = [{"id": a.id, "name": a.name, "project": a.project.name, "project_id": a.project_id}
             for a in user.applications]
-    return {"name": user.name, "email": user.email, "role": user.role,
+    return {"token": create_access_token(user),
+            "name": user.name, "email": user.email, "role": user.role,
             "department": user.department, "team": user.team, "applications": apps}
 
 
 # ── Projects ─────────────────────────────────────────────────────────────────
 
 @router.get("/projects")
-def list_projects(db: Session = Depends(get_db)):
+def list_projects(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return [{"id": p.id, "name": p.name, "description": p.description,
              "app_count": len(p.applications)} for p in db.query(Project).all()]
 
@@ -39,7 +41,8 @@ def list_projects(db: Session = Depends(get_db)):
 # ── Applications ─────────────────────────────────────────────────────────────
 
 @router.get("/applications")
-def list_applications(project_id: Optional[int] = None, db: Session = Depends(get_db)):
+def list_applications(project_id: Optional[int] = None, db: Session = Depends(get_db),
+                       _: User = Depends(get_current_user)):
     q = db.query(Application)
     if project_id:
         q = q.filter(Application.project_id == project_id)
@@ -49,7 +52,7 @@ def list_applications(project_id: Optional[int] = None, db: Session = Depends(ge
 
 
 @router.get("/applications/{app_id}")
-def get_application(app_id: int, db: Session = Depends(get_db)):
+def get_application(app_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     a = db.query(Application).filter(Application.id == app_id).first()
     if not a:
         raise HTTPException(404, "Application not found")
@@ -65,7 +68,8 @@ def get_application(app_id: int, db: Session = Depends(get_db)):
 # ── Queues ───────────────────────────────────────────────────────────────────
 
 @router.get("/queues")
-def list_queues(application_id: Optional[int] = None, db: Session = Depends(get_db)):
+def list_queues(application_id: Optional[int] = None, db: Session = Depends(get_db),
+                 _: User = Depends(get_current_user)):
     q = db.query(Queue).order_by(Queue.name)
     if application_id:
         q = q.filter(Queue.application_id == application_id)
@@ -84,7 +88,7 @@ def list_queues(application_id: Optional[int] = None, db: Session = Depends(get_
 @router.get("/tasks")
 def list_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None,
                application_id: Optional[int] = None, queue_id: Optional[int] = None,
-               db: Session = Depends(get_db)):
+               db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     q = db.query(Task).order_by(Task.created_at.desc())
     if status:
         q = q.filter(Task.status == status)
@@ -102,7 +106,7 @@ def list_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None,
 
 
 @router.get("/tasks/{task_id}")
-def get_task(task_id: int, db: Session = Depends(get_db)):
+def get_task(task_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")
@@ -120,7 +124,8 @@ class TaskActionReq(BaseModel):
     result: Optional[dict] = None
 
 @router.post("/tasks/{task_id}/action")
-def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_db)):
+def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_db),
+                    _: User = Depends(get_current_user)):
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")
@@ -152,7 +157,8 @@ def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_d
 # ── Dashboard stats ──────────────────────────────────────────────────────────
 
 @router.get("/dashboard")
-def dashboard(application_id: Optional[int] = None, db: Session = Depends(get_db)):
+def dashboard(application_id: Optional[int] = None, db: Session = Depends(get_db),
+              _: User = Depends(get_current_user)):
     q = db.query(Task)
     if application_id:
         queue_ids = [qr.id for qr in db.query(Queue).filter(Queue.application_id == application_id).all()]
@@ -178,7 +184,7 @@ def dashboard(application_id: Optional[int] = None, db: Session = Depends(get_db
 # ── Users (admin) ────────────────────────────────────────────────────────────
 
 @router.get("/users")
-def list_users(db: Session = Depends(get_db)):
+def list_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     return [{"id": u.id, "name": u.name, "email": u.email, "role": u.role,
              "department": u.department, "team": u.team} for u in db.query(User).all()]
 

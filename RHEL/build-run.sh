@@ -28,12 +28,13 @@ case "$cmd" in
 
   start)
     ENV_FILE="$PROJECT_DIR/.env"
+    RHEL_HOST_IP="${RHEL_HOST_IP:?Set RHEL_HOST_IP to the host LAN IP before running start (e.g. RHEL_HOST_IP=10.0.0.5 ./build-run.sh start)}"
     echo "Starting $CONTAINER on port 8086 ..."
     sudo podman rm -f "$CONTAINER" 2>/dev/null || true
     sudo podman run -d \
       --name "$CONTAINER" \
       -p 8086:8086 \
-      --add-host rhel-host:192.168.1.98 \
+      --add-host "rhel-host:${RHEL_HOST_IP}" \
       --env-file "$ENV_FILE" \
       "$IMAGE"
     echo ""

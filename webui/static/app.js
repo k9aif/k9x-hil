@@ -1,6 +1,7 @@
 /* k9x HIL — Case Management UI */
 
 let currentUser = null;
+let authToken = null;
 let activeTab = "dashboard";
 let activeAppId = null;
 let allTasks = [];
@@ -11,6 +12,15 @@ let sortCol = "created_at";
 let sortDir = -1; // -1 = newest first
 
 // ── Auth ────────────────────────────────────────────────────────────────────
+
+function authFetch(url, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {},
+    authToken ? { "Authorization": "Bearer " + authToken } : {});
+  return fetch(url, Object.assign({}, opts, { headers })).then(r => {
+    if (r.status === 401) { logout(); throw new Error("Session expired"); }
+    return r;
+  });
+}
 
 function doLogin(e) {
   e.preventDefault();
@@ -23,7 +33,9 @@ function doLogin(e) {
   .then(r => { if (!r.ok) throw new Error("Invalid credentials"); return r.json(); })
   .then(u => {
     currentUser = u;
+    authToken = u.token;
     localStorage.setItem("k9x_hil_user", JSON.stringify(u));
+    localStorage.setItem("k9x_hil_token", u.token);
     showApp();
   })
   .catch(() => {
@@ -33,7 +45,9 @@ function doLogin(e) {
 
 function logout() {
   currentUser = null;
+  authToken = null;
   localStorage.removeItem("k9x_hil_user");
+  localStorage.removeItem("k9x_hil_token");
   allTasks = []; dashData = null; allQueues = []; activeAppId = null;
   document.getElementById("user-chip").style.display = "none";
   document.getElementById("user-menu").style.display = "none";
@@ -127,7 +141,7 @@ function switchToApp(appId) {
 
 async function loadTasksForApp(appId) {
   try {
-    const r = await fetch("/api/tasks?application_id=" + appId);
+    const r = await authFetch("/api/tasks?application_id=" + appId);
     allTasks = await r.json();
   } catch { allTasks = []; }
   renderMyTasks();
@@ -143,21 +157,21 @@ async function loadAll() {
 
 async function loadTasks() {
   try {
-    const r = await fetch("/api/tasks");
+    const r = await authFetch("/api/tasks");
     allTasks = await r.json();
   } catch { allTasks = []; }
 }
 
 async function loadDashboard() {
   try {
-    const r = await fetch("/api/dashboard");
+    const r = await authFetch("/api/dashboard");
     dashData = await r.json();
   } catch { dashData = null; }
 }
 
 async function loadQueues() {
   try {
-    const r = await fetch("/api/queues");
+    const r = await authFetch("/api/queues");
     allQueues = await r.json();
   } catch { allQueues = []; }
 }
@@ -596,7 +610,7 @@ function renderQueues() {
 async function filterByQueue(queueId, queueName) {
   switchTab("alltasks");
   try {
-    const r = await fetch("/api/tasks?queue_id=" + queueId);
+    const r = await authFetch("/api/tasks?queue_id=" + queueId);
     allTasks = await r.json();
   } catch { allTasks = []; }
   document.getElementById("header-tab-title").textContent = queueName;
@@ -654,7 +668,7 @@ function taskCardHtml(t) {
 
 async function openTask(id) {
   try {
-    const r = await fetch("/api/tasks/" + id);
+    const r = await authFetch("/api/tasks/" + id);
     const t = await r.json();
     document.getElementById("modal-title").textContent = t.title;
     document.getElementById("modal-body").innerHTML = taskDetailHtml(t);
@@ -780,7 +794,7 @@ function taskDetailHtml(t) {
 async function taskAction(taskId, action) {
   const comment = document.getElementById("action-comment")?.value || "";
   try {
-    await fetch(`/api/tasks/${taskId}/action`, {
+    await authFetch(`/api/tasks/${taskId}/action`, {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ action, actor: currentUser.email, comment: comment || null })
     });
@@ -842,9 +856,9 @@ function renderAdminLanding() {
 
 async function renderAdminIAM() {
   let users = [];
-  try { const r = await fetch("/api/users"); users = await r.json(); } catch {}
+  try { const r = await authFetch("/api/users"); users = await r.json(); } catch {}
   let apps = [];
-  try { const r = await fetch("/api/applications"); apps = await r.json(); } catch {}
+  try { const r = await authFetch("/api/applications"); apps = await r.json(); } catch {}
 
   document.getElementById("admin-iam-content").innerHTML = `
     <div class="admin-section">
@@ -1103,9 +1117,9 @@ function configureRule(ruleId) {
 
 async function renderAdminProjects() {
   let projects = [];
-  try { const r = await fetch("/api/projects"); projects = await r.json(); } catch {}
+  try { const r = await authFetch("/api/projects"); projects = await r.json(); } catch {}
   let apps = [];
-  try { const r = await fetch("/api/applications"); apps = await r.json(); } catch {}
+  try { const r = await authFetch("/api/applications"); apps = await r.json(); } catch {}
 
   document.getElementById("admin-projects-content").innerHTML = `
     <div class="admin-section">
@@ -1199,9 +1213,11 @@ function initTheme() {
 (function init() {
   initTheme();
   const saved = localStorage.getItem("k9x_hil_user");
-  if (saved) {
+  const savedToken = localStorage.getItem("k9x_hil_token");
+  if (saved && savedToken) {
     try {
       currentUser = JSON.parse(saved);
+      authToken = savedToken;
       showApp();
     } catch { logout(); }
   }
