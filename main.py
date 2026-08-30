@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from backend.database import engine, init_schema, SCHEMA
 from backend.models import Base
 from backend.routes import router
 from backend.seed import seed
+from backend.kafka_consumer import run_consumer
 
 _ROOT   = Path(__file__).resolve().parent
 _WEBUI  = _ROOT / "webui"
@@ -28,10 +30,11 @@ if _STATIC.exists():
 
 
 @app.on_event("startup")
-def startup():
+async def startup():
     init_schema()
     Base.metadata.create_all(bind=engine, checkfirst=True)
     seed()
+    asyncio.create_task(run_consumer())
 
 
 @app.get("/health")

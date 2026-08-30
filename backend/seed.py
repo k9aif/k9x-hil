@@ -33,10 +33,13 @@ def seed():
             db.add(Project(name="Demo", description="Demonstration project — insurance document processing pipeline"))
         if not db.query(Project).filter(Project.name == "K9 Platform").first():
             db.add(Project(name="K9 Platform", description="K9-AIF framework and ecosystem platform services"))
+        if not db.query(Project).filter(Project.name == "DAS").first():
+            db.add(Project(name="DAS", description="Defense Acquisition System — DoDAF/JCIDS/Acquisition/SE reference pipeline"))
         db.commit()
 
         demo_proj = db.query(Project).filter(Project.name == "Demo").first()
         k9_proj   = db.query(Project).filter(Project.name == "K9 Platform").first()
+        das_proj  = db.query(Project).filter(Project.name == "DAS").first()
 
         # ── Applications ─────────────────────────────────────────────
         apps_data = [
@@ -46,15 +49,18 @@ def seed():
                  description="OCR extraction verification for insurance documents"),
             dict(project_id=k9_proj.id, name="Architecture Review",
                  description="SBB promotion and architecture pattern governance"),
+            dict(project_id=das_proj.id, name="JCIDS",
+                 description="Joint Capabilities Integration and Development System pipeline"),
         ]
         for a in apps_data:
             if not db.query(Application).filter(Application.name == a["name"], Application.project_id == a["project_id"]).first():
                 db.add(Application(**a))
         db.commit()
 
-        claims_app = db.query(Application).filter(Application.name == "Claims Processor").first()
+        claims_app = db.query(Application).filter(Application.name == "EOC").first()
         docver_app = db.query(Application).filter(Application.name == "Document Verification").first()
         archrev_app = db.query(Application).filter(Application.name == "Architecture Review").first()
+        jcids_app   = db.query(Application).filter(Application.name == "JCIDS").first()
 
         # ── Assign users to applications ─────────────────────────────
         james = db.query(User).filter(User.email == "james.park@k9x.ai").first()
@@ -70,11 +76,11 @@ def seed():
         if maria and archrev_app not in maria.applications:
             maria.applications.append(archrev_app)
         if ravi:
-            for app in [claims_app, docver_app, archrev_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app]:
                 if app not in ravi.applications:
                     ravi.applications.append(app)
         if demo:
-            for app in [claims_app, docver_app, archrev_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
         db.commit()
@@ -100,6 +106,12 @@ def seed():
             dict(application_id=archrev_app.id, name="Compliance Approval",
                  description="Regulatory compliance sign-offs for production deployment",
                  topic="workflow.hil.k9platform.architecture.compliance",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=jcids_app.id, name="JROC Review",
+                 description="JROC-VALIDATION gate: program manager or JROC representative "
+                             "reviews the assembled capability-gap review package before "
+                             "the pipeline may proceed to Acquisition.",
+                 topic="workflow.hil.das.jroc",
                  ttl_hours=168, ttl_action="reject"),
         ]
         for q in queues_data:
