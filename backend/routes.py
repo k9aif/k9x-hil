@@ -1,4 +1,6 @@
 import hashlib
+import os
+import boto3
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -115,6 +117,41 @@ def get_task(task_id: int, db: Session = Depends(get_db), _: User = Depends(get_
     d["actions"] = [{"id": a.id, "action": a.action, "actor": a.actor,
                      "comment": a.comment, "created_at": _iso(a.created_at)} for a in actions]
     return d
+
+
+@router.get("/tasks/{task_id}/document")
+def get_task_document(task_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Fetch the reviewer-facing document directly from object storage,
+    using the task's own s3:// artifact URI. HIL never calls back into the
+    publishing system's own API for this -- it only needs the Kafka message
+    and object storage, matching the decoupled architecture the rest of
+    this platform is built on."""
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+
+    s3_uri = next((a for a in (t.artifacts or []) if isinstance(a, str) and a.startswith("s3://")), None)
+    if not s3_uri:
+        raise HTTPException(404, "No object-storage artifact on this task")
+
+    bucket, _, key = s3_uri[len("s3://"):].partition("/")
+    if not bucket or not key:
+        raise HTTPException(502, f"Malformed artifact URI: {s3_uri}")
+
+    try:
+        client = boto3.client(
+            "s3",
+            endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+            config=boto3.session.Config(s3={"addressing_style": "path"}),
+        )
+        obj = client.get_object(Bucket=bucket, Key=key)
+        content = obj["Body"].read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        raise HTTPException(502, f"Could not fetch document from object storage ({bucket}/{key}): {exc}")
+
+    return {"bucket": bucket, "key": key, "content": content}
 
 
 class TaskActionReq(BaseModel):

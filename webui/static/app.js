@@ -675,7 +675,27 @@ async function openTask(id) {
     document.getElementById("modal-title").textContent = t.title;
     document.getElementById("modal-body").innerHTML = taskDetailHtml(t);
     document.getElementById("task-modal").style.display = "flex";
+
+    const hasS3Artifact = (t.artifacts || []).some(a => typeof a === "string" && a.startsWith("s3://"));
+    if (hasS3Artifact) loadDocumentPreview(id);
   } catch(e) { console.error(e); }
+}
+
+async function loadDocumentPreview(taskId) {
+  const el = document.getElementById("doc-preview-" + taskId);
+  if (!el) return;
+  try {
+    const r = await authFetch("/api/tasks/" + taskId + "/document");
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      el.textContent = "Could not load document: " + (err.detail || r.statusText);
+      return;
+    }
+    const data = await r.json();
+    el.textContent = data.content;
+  } catch(e) {
+    el.textContent = "Could not load document: " + e.message;
+  }
 }
 
 function taskDetailHtml(t) {
@@ -740,7 +760,7 @@ function taskDetailHtml(t) {
           const label = typeof a === "string" ? a : (a.name || a.url || "");
           const pii = typeof a === "object" && a.pii;
           const isWebLink = /^https?:\/\//i.test(uri);
-          const title = isWebLink ? "Open document" : "Object storage URI -- not a browser-navigable link in this proof-of-concept";
+          const title = isWebLink ? "Open document" : "Object storage URI -- see Document Preview below";
           return `<div class="artifact-item">
             <span class="artifact-icon">📄</span>
             <a class="artifact-name artifact-link" href="${esc(uri)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(label)}</a>
@@ -748,6 +768,14 @@ function taskDetailHtml(t) {
           </div>`;
         }).join("")}
       </div>
+    </div>`;
+  }
+
+  const s3Artifact = (t.artifacts || []).find(a => typeof a === "string" && a.startsWith("s3://"));
+  if (s3Artifact) {
+    html += `<div class="modal-section">
+      <div class="modal-section-title">Document Preview</div>
+      <div class="modal-payload" id="doc-preview-${t.id}">Loading document from object storage…</div>
     </div>`;
   }
 

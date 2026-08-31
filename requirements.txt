@@ -6,3 +6,4 @@ sqlalchemy>=2.0
 psycopg2-binary>=2.9
 pyjwt>=2.8
 aiokafka>=0.11
+boto3>=1.34
