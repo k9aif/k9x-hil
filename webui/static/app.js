@@ -737,9 +737,11 @@ function taskDetailHtml(t) {
           const uri = typeof a === "string" ? a : (a.url || a.name || "");
           const label = typeof a === "string" ? a : (a.name || a.url || "");
           const pii = typeof a === "object" && a.pii;
+          const isWebLink = /^https?:\/\//i.test(uri);
+          const title = isWebLink ? "Open document" : "Object storage URI -- not a browser-navigable link in this proof-of-concept";
           return `<div class="artifact-item">
             <span class="artifact-icon">📄</span>
-            <a class="artifact-name artifact-link" href="${esc(uri)}" target="_blank" rel="noopener" title="Placeholder link -- object storage viewing is not wired up in this proof-of-concept">${esc(label)}</a>
+            <a class="artifact-name artifact-link" href="${esc(uri)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(label)}</a>
             ${pii ? '<span class="badge badge-pii" style="font-size:9px">PII</span>' : ''}
           </div>`;
         }).join("")}
