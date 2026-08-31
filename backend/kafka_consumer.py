@@ -44,6 +44,7 @@ def _ingest_message(topic: str, message: dict) -> None:
             correlation_id=correlation_id,
             status="pending",
             priority=message.get("priority", "medium"),
+            assigned_to=message.get("assigned_to", "demo@k9x.ai"),
             payload=message.get("payload"),
             artifacts=message.get("artifacts"),
             pii=message.get("pii", queue.pii),
