@@ -427,6 +427,8 @@ function urgentCardHtml(t) {
         <span>${esc(t.queue_name || "")}</span>
         <span>·</span>
         <span>${esc(assignee)}</span>
+        <span>·</span>
+        <span title="${esc(formatDate(t.created_at))}">${timeAgo(t.created_at)}</span>
       </div>
       ${pct !== null ? `<div class="urgency-bar-wrap">
         <div class="urgency-bar" style="width:${barWidth}%;background:${color}"></div>
