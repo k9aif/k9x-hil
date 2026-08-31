@@ -70,9 +70,9 @@ function showApp() {
   document.getElementById("user-menu-email").textContent = currentUser.email;
   document.getElementById("user-menu-role").textContent = currentUser.role;
   buildAppTabs();
-  // Show admin section for admins
-  const adminSection = document.getElementById("sidebar-admin-section");
-  if (adminSection) adminSection.style.display = currentUser.role === "admin" ? "block" : "none";
+  // Show admin button for admins
+  const adminBtn = document.getElementById("header-admin-btn");
+  if (adminBtn) adminBtn.style.display = currentUser.role === "admin" ? "flex" : "none";
   switchTab("dashboard");
   loadAll();
 }

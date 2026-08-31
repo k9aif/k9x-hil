@@ -454,7 +454,13 @@ body.dark .pie-wrap svg { filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
 body.dark .task-card-expired { background: #ef444412; }
 
 /* ── Administration ──────────────────────────────────────────────────────── */
-.sidebar-admin { border-top: 1px solid var(--border); margin-top: auto; }
+.header-admin-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--accent-dim); border: 1px solid var(--accent);
+  color: var(--accent); font-size: 12px; font-weight: 600;
+  border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.header-admin-btn:hover { background: var(--accent); color: #fff; }
 
 .admin-section { }
 .admin-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }

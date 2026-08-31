@@ -54,15 +54,6 @@
       <div class="sidebar-desc-body">Kafka topic queues — tasks grouped by source workflow.</div>
     </div>
 
-    <!-- Administration — admin only -->
-    <div class="sidebar-admin" id="sidebar-admin-section" style="display:none">
-      <nav class="sidebar-nav" style="padding-top:0">
-        <button class="nav-item" id="nav-admin" onclick="switchTab('admin')">
-          <span class="nav-icon">⊛</span> Administration
-        </button>
-      </nav>
-    </div>
-
     <div class="sidebar-footer">
       <div class="sidebar-footer-text">k9x HIL Case Management</div>
       <div class="sidebar-footer-sub">Event-driven · Kafka-native</div>
@@ -77,6 +68,9 @@
         <span id="header-tab-title">Dashboard</span>
       </div>
       <div class="header-actions">
+        <button class="header-admin-btn" id="header-admin-btn" style="display:none" onclick="switchTab('admin')">
+          <span class="nav-icon">⊛</span> Administration
+        </button>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
         <div class="user-chip" id="user-chip" style="display:none" onclick="toggleUserMenu()">
           <span class="user-avatar" id="user-avatar">R</span>
