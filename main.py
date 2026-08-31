@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from backend.database import engine, init_schema, SCHEMA
+from backend.database import engine, init_schema, ensure_columns, SCHEMA
 from backend.models import Base
 from backend.routes import router
 from backend.seed import seed
@@ -33,6 +33,7 @@ if _STATIC.exists():
 async def startup():
     init_schema()
     Base.metadata.create_all(bind=engine, checkfirst=True)
+    ensure_columns()
     seed()
     asyncio.create_task(run_consumer())
 

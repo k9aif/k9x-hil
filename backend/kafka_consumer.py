@@ -47,6 +47,7 @@ def _ingest_message(topic: str, message: dict) -> None:
             assigned_to=message.get("assigned_to", "demo@k9x.ai"),
             payload=message.get("payload"),
             artifacts=message.get("artifacts"),
+            jira_ticket=message.get("jira_ticket"),
             pii=message.get("pii", queue.pii),
             pii_fields=message.get("pii_fields"),
             ttl_hours=message.get("ttl_hours", queue.ttl_hours),

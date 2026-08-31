@@ -728,14 +728,33 @@ function taskDetailHtml(t) {
   }
 
   if (t.artifacts && t.artifacts.length > 0) {
+    // Artifacts arrive either as plain URI strings (e.g. "s3://bucket/key",
+    // the current DAS/JCIDS shape) or as {name, pii} objects -- support both.
     html += `<div class="modal-section">
       <div class="modal-section-title">Artifacts</div>
       <div class="artifact-list">
-        ${t.artifacts.map(a => `<div class="artifact-item">
-          <span class="artifact-icon">📄</span>
-          <span class="artifact-name">${esc(a.name)}</span>
-          ${a.pii ? '<span class="badge badge-pii" style="font-size:9px">PII</span>' : ''}
-        </div>`).join("")}
+        ${t.artifacts.map(a => {
+          const uri = typeof a === "string" ? a : (a.url || a.name || "");
+          const label = typeof a === "string" ? a : (a.name || a.url || "");
+          const pii = typeof a === "object" && a.pii;
+          return `<div class="artifact-item">
+            <span class="artifact-icon">📄</span>
+            <a class="artifact-name artifact-link" href="${esc(uri)}" target="_blank" rel="noopener" title="Placeholder link -- object storage viewing is not wired up in this proof-of-concept">${esc(label)}</a>
+            ${pii ? '<span class="badge badge-pii" style="font-size:9px">PII</span>' : ''}
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+  }
+
+  if (t.jira_ticket) {
+    html += `<div class="modal-section">
+      <div class="modal-section-title">Jira Ticket</div>
+      <div class="artifact-list">
+        <div class="artifact-item">
+          <span class="artifact-icon">🎫</span>
+          <span class="artifact-name">${esc(t.jira_ticket)}</span>
+        </div>
       </div>
     </div>`;
   }

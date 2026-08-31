@@ -34,3 +34,12 @@ def init_schema():
     with engine.connect() as conn:
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
         conn.commit()
+
+
+def ensure_columns():
+    # create_all() only creates missing tables, not missing columns on
+    # tables that already exist -- new columns need an explicit ALTER.
+    # Must run after create_all() so the table is guaranteed to exist.
+    with engine.connect() as conn:
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS jira_ticket VARCHAR(500)"))
+        conn.commit()

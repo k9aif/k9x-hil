@@ -201,7 +201,8 @@ def _task_dict(t, db):
             "application_name": app.name if app else None,
             "application_id": app.id if app else None,
             "payload": t.payload, "result": t.result,
-            "artifacts": t.artifacts, "pii": bool(t.pii), "pii_fields": t.pii_fields,
+            "artifacts": t.artifacts, "jira_ticket": t.jira_ticket,
+            "pii": bool(t.pii), "pii_fields": t.pii_fields,
             "ttl_hours": t.ttl_hours, "ttl_action": t.ttl_action,
             "due_date": _iso(t.due_date), "created_at": _iso(t.created_at),
             "updated_at": _iso(t.updated_at), "completed_at": _iso(t.completed_at)}

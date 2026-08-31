@@ -157,6 +157,8 @@ def seed():
                  correlation_id="exec-e5f6g7h8", status="in_progress", priority="medium",
                  assigned_to="james.park@k9x.ai", pii=1, pii_fields=["payload.candidates"],
                  payload={"document_id": "DOC-9921", "candidates": ["John A. Smith", "John A. Smyth"], "agent": "DocumentExtractorAgent"},
+                 artifacts=["s3://k9x-eoc-documents/DOC-9921/source.pdf"],
+                 jira_ticket="EOC-142 (placeholder -- no live Jira integration yet)",
                  ttl_hours=48, ttl_action="reject"),
 
             dict(queue_id=sbb_q.id,

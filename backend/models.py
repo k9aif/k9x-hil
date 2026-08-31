@@ -97,6 +97,7 @@ class Task(Base):
     payload              = Column(JSON)
     result               = Column(JSON)
     artifacts            = Column(JSON)
+    jira_ticket          = Column(String(500))
     pii                  = Column(Boolean, default=False)
     pii_fields           = Column(JSON)
     ttl_hours            = Column(Integer)
