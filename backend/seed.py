@@ -26,6 +26,11 @@ def seed():
             db.add(User(name="Demo User", email="demo@k9x.ai", role="worker",
                         department="Demo", team="Demo",
                         password_hash=hashlib.sha256(b"demo").hexdigest()))
+        # Admin user
+        if not db.query(User).filter(User.email == "admin@k9x.ai").first():
+            db.add(User(name="Admin", email="admin@k9x.ai", role="admin",
+                        department="Platform Engineering", team="k9x",
+                        password_hash=hashlib.sha256(b"admin123").hexdigest()))
         db.commit()
 
         # ── Projects ────────────────────────────────────────────────
@@ -68,6 +73,7 @@ def seed():
         maria = db.query(User).filter(User.email == "maria.silva@k9x.ai").first()
         ravi  = db.query(User).filter(User.email == "ravinatarajan@k9x.ai").first()
         demo  = db.query(User).filter(User.email == "demo@k9x.ai").first()
+        admin = db.query(User).filter(User.email == "admin@k9x.ai").first()
 
         if james and claims_app not in james.applications:
             james.applications.extend([claims_app, docver_app])
@@ -83,6 +89,10 @@ def seed():
             for app in [claims_app, docver_app, archrev_app, jcids_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
+        if admin:
+            for app in [claims_app, docver_app, archrev_app, jcids_app]:
+                if app not in admin.applications:
+                    admin.applications.append(app)
         db.commit()
 
         # ── Queues ───────────────────────────────────────────────────
