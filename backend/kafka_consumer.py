@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from backend.database import SessionLocal
 from backend.models import Queue, Task, TaskAction
@@ -35,6 +36,12 @@ def _ingest_message(topic: str, message: dict) -> None:
                 log.info("[kafka_consumer] duplicate correlation_id=%s on topic=%s; skipping", correlation_id, topic)
                 return
 
+        ttl_hours = message.get("ttl_hours", queue.ttl_hours)
+        due_date = (
+            datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+            if ttl_hours else None
+        )
+
         task = Task(
             queue_id=queue.id,
             title=message.get("title", f"Task on {topic}"),
@@ -51,8 +58,9 @@ def _ingest_message(topic: str, message: dict) -> None:
             jira_ticket=message.get("jira_ticket"),
             pii=message.get("pii", queue.pii),
             pii_fields=message.get("pii_fields"),
-            ttl_hours=message.get("ttl_hours", queue.ttl_hours),
+            ttl_hours=ttl_hours,
             ttl_action=message.get("ttl_action", queue.ttl_action),
+            due_date=due_date,
         )
         db.add(task)
         db.commit()

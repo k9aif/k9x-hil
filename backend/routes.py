@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction
 from backend.auth import create_access_token, get_current_user, require_admin
+from backend.task_actions import apply_task_action
 
 router = APIRouter(prefix="/api")
 
@@ -167,28 +168,11 @@ def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_d
     if not t:
         raise HTTPException(404, "Task not found")
 
-    now = datetime.now(timezone.utc)
-
-    if req.action == "claim":
-        t.assigned_to = req.actor
-        t.status = "pending"
-    elif req.action == "start":
-        t.status = "in_progress"
-    elif req.action == "complete":
-        t.status = "completed"
-        t.completed_at = now
-        if req.result:
-            t.result = req.result
-    elif req.action == "escalate":
-        t.status = "escalated"
-    elif req.action == "reject":
-        t.status = "rejected"
-        t.completed_at = now
-
-    t.updated_at = now
-    db.add(TaskAction(task_id=task_id, action=req.action, actor=req.actor, comment=req.comment))
-    db.commit()
-    return {"ok": True, "status": t.status}
+    try:
+        status = apply_task_action(db, t, req.action, req.actor, req.comment, req.result)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "status": status}
 
 
 # ── Dashboard stats ──────────────────────────────────────────────────────────
