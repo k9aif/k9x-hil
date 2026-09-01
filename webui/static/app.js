@@ -288,17 +288,6 @@ function timeLeftLabel(ms) {
   return d + "d " + (h % 24) + "h left";
 }
 
-function sortByUrgency(tasks) {
-  return [...tasks].sort((a, b) => {
-    const aExp = taskExpiry(a);
-    const bExp = taskExpiry(b);
-    if (!aExp && !bExp) return 0;
-    if (!aExp) return 1;
-    if (!bExp) return -1;
-    return aExp - bExp;
-  });
-}
-
 // ── Dashboard — Queue-centric, grouped by Project → Application ────────────
 
 function renderDashboard() {
@@ -352,94 +341,12 @@ function renderDashboard() {
     </div>
   </div>`;
 
-  html += "";
-
-  // For each app, render queues with tasks underneath
-  const apps = currentUser?.applications || [];
-  const appsByProject = {};
-  apps.forEach(a => {
-    if (!appsByProject[a.project]) appsByProject[a.project] = [];
-    appsByProject[a.project].push(a);
-  });
-
-  Object.keys(appsByProject).forEach(projName => {
-    appsByProject[projName].forEach(app => {
-      const appQueues = allQueues.filter(q => q.application_id === app.id);
-      if (appQueues.length === 0) return;
-
-      html += `<div class="dash-project-header">
-        <span class="dash-project-name">${esc(projName)}</span>
-        <span class="dash-project-sep">›</span>
-        <span class="dash-app-name">${esc(app.name)}</span>
-      </div>`;
-
-      html += '<div class="dash-queue-grid">';
-      appQueues.forEach(q => {
-        const qTasks = allTasks.filter(t => t.queue_name === q.name && t.application_id === app.id);
-        const activeTasks = qTasks.filter(t => ["pending","in_progress"].includes(t.status));
-        const urgent24h = activeTasks.filter(t => {
-          const left = taskTimeLeft(t);
-          return left !== null && left > 0 && left <= 86400000;
-        });
-        const sorted = sortByUrgency(activeTasks);
-
-        html += `<div class="dash-queue-card${urgent24h.length > 0 ? ' dash-queue-urgent' : ''}">
-          <div class="dash-queue-header">
-            <div class="dash-queue-name">${esc(q.name)}</div>
-            <div class="dash-queue-count">${activeTasks.length} active</div>
-          </div>
-          <div class="dash-queue-topic">${esc(q.topic || "")}</div>
-          ${q.ttl_hours ? `<div class="dash-queue-ttl">TTL ${q.ttl_hours}h → ${q.ttl_action || "expire"}</div>` : ""}
-          ${urgent24h.length > 0 ? `<div class="dash-queue-urgent-bar">
-            <span class="dash-urgent-count">${urgent24h.length}</span> ending within 24h
-          </div>` : ""}
-          ${sorted.length > 0 ? `<div class="dash-queue-tasks">
-            ${sorted.map(t => urgentCardHtml(t)).join("")}
-          </div>` : '<div class="dash-queue-empty">No active tasks</div>'}
-        </div>`;
-      });
-      html += '</div>';
-    });
-  });
-
-  if (!html) {
-    html = '<div class="empty-state" style="margin-top:24px"><div class="empty-state-icon">◇</div><div class="empty-state-text">No queues assigned to you</div></div>';
-  }
-
+  // Dashboard is a summary, not a task browser: stat cards + Recent Activity
+  // (pie chart, Queue Summary table) only. Clicking a queue row above already
+  // navigates to that queue's filtered task list via filterByQueue() -- the
+  // per-app/per-queue task cards that used to repeat below this were fully
+  // redundant with that click-through and with the Queues page.
   document.getElementById("recent-tasks").innerHTML = html;
-}
-
-function urgentCardHtml(t) {
-  const left = taskTimeLeft(t);
-  const pct = taskUrgencyPct(t);
-  const label = timeLeftLabel(left);
-  const color = pct !== null ? urgencyColor(pct) : "var(--muted)";
-  const barWidth = pct !== null ? pct : 0;
-  const assignee = t.assigned_to ? t.assigned_to.split("@")[0] : "Unassigned";
-  const expired = left !== null && left <= 0;
-
-  return `<div class="task-card ${expired ? 'task-card-expired' : ''}" onclick="openTask(${t.id})">
-    <div class="task-priority-bar priority-${t.priority}"></div>
-    <div class="task-card-body">
-      <div class="task-card-title">${esc(t.title)}</div>
-      <div class="task-card-meta">
-        ${t.application_name ? `<span class="task-app-label">${esc(t.application_name)}</span>` : ""}
-        <span>${esc(t.queue_name || "")}</span>
-        <span>·</span>
-        <span>${esc(assignee)}</span>
-        <span>·</span>
-        <span title="${esc(formatDate(t.created_at))}">${timeAgo(t.created_at)}</span>
-      </div>
-      ${pct !== null ? `<div class="urgency-bar-wrap">
-        <div class="urgency-bar" style="width:${barWidth}%;background:${color}"></div>
-      </div>` : ""}
-    </div>
-    <div class="task-card-right">
-      <span class="badge badge-${t.priority}">${t.priority}</span>
-      ${label ? `<span class="urgency-label" style="color:${color}">${label}</span>` : ""}
-      ${t.ttl_action ? `<span class="urgency-action">→ ${t.ttl_action}</span>` : ""}
-    </div>
-  </div>`;
 }
 
 function renderPieChart(statusCounts) {
