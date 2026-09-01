@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -94,36 +95,55 @@ async def run_consumer() -> None:
         log.warning("[kafka_consumer] no Queues registered; consumer not starting")
         return
 
-    consumer = AIOKafkaConsumer(
-        *topics,
-        bootstrap_servers=[broker],
-        group_id="k9x-hil-ingest",
-        # "earliest", not "latest" -- a restart-timing gap where a message
-        # publishes while this consumer is reconnecting previously meant
-        # that message was gone forever ("latest" only looks forward from
-        # wherever it happens to reconnect). Safe to replay from the start
-        # on a cold/fresh group because _ingest_message() below already
-        # dedupes by correlation_id+source_topic; on a warm restart this
-        # resumes from the last committed offset exactly as before, since
-        # auto_offset_reset only applies when no valid offset exists yet.
-        auto_offset_reset="earliest",
-        enable_auto_commit=True,
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-    )
+    # Real incident, 2026-08-31: a burst of tasks ingested fine, then nothing
+    # for 5+ hours despite DAS publishing repeatedly and confirmed present on
+    # the topic (checked directly with rpk). Root cause: the `async for msg
+    # in consumer` loop below has no exception handling of its own -- only
+    # the per-message body did. A dropped broker connection or any other
+    # error from the iterator itself propagated straight out of this
+    # function, silently killing the fire-and-forget asyncio.create_task()
+    # in main.py with no crash, no visible error, just permanent silence.
+    # Now retries the whole connect-and-consume cycle indefinitely instead
+    # of dying once.
+    backoff_s = 2
+    while True:
+        consumer = AIOKafkaConsumer(
+            *topics,
+            bootstrap_servers=[broker],
+            group_id="k9x-hil-ingest",
+            # "earliest", not "latest" -- a restart-timing gap where a
+            # message publishes while this consumer is reconnecting
+            # previously meant that message was gone forever ("latest" only
+            # looks forward from wherever it happens to reconnect). Safe to
+            # replay from the start on a cold/fresh group because
+            # _ingest_message() below already dedupes by
+            # correlation_id+source_topic; on a warm restart this resumes
+            # from the last committed offset exactly as before, since
+            # auto_offset_reset only applies when no valid offset exists yet.
+            auto_offset_reset="earliest",
+            enable_auto_commit=True,
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+        )
 
-    try:
-        await consumer.start()
-    except Exception:
-        log.exception("[kafka_consumer] failed to connect to broker=%s; consumer not running", broker)
-        return
-
-    log.info("[kafka_consumer] listening | broker=%s | topics=%s", broker, topics)
-    try:
-        async for msg in consumer:
+        try:
+            await consumer.start()
+            log.info("[kafka_consumer] listening | broker=%s | topics=%s", broker, topics)
+            backoff_s = 2  # reset once a connection actually succeeds
+            async for msg in consumer:
+                try:
+                    _ingest_message(msg.topic, msg.value)
+                except Exception:
+                    log.exception("[kafka_consumer] error handling message on topic=%s", msg.topic)
+        except Exception:
+            log.exception(
+                "[kafka_consumer] consumer loop failed (broker=%s) -- reconnecting in %ds",
+                broker, backoff_s,
+            )
+        finally:
             try:
-                _ingest_message(msg.topic, msg.value)
+                await consumer.stop()
             except Exception:
-                log.exception("[kafka_consumer] error handling message on topic=%s", msg.topic)
-    finally:
-        await consumer.stop()
-        log.info("[kafka_consumer] stopped")
+                log.exception("[kafka_consumer] error stopping consumer during cleanup")
+
+        await asyncio.sleep(backoff_s)
+        backoff_s = min(backoff_s * 2, 60)
