@@ -98,7 +98,15 @@ async def run_consumer() -> None:
         *topics,
         bootstrap_servers=[broker],
         group_id="k9x-hil-ingest",
-        auto_offset_reset="latest",
+        # "earliest", not "latest" -- a restart-timing gap where a message
+        # publishes while this consumer is reconnecting previously meant
+        # that message was gone forever ("latest" only looks forward from
+        # wherever it happens to reconnect). Safe to replay from the start
+        # on a cold/fresh group because _ingest_message() below already
+        # dedupes by correlation_id+source_topic; on a warm restart this
+        # resumes from the last committed offset exactly as before, since
+        # auto_offset_reset only applies when no valid offset exists yet.
+        auto_offset_reset="earliest",
         enable_auto_commit=True,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
     )
