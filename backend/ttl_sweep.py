@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from backend.database import SessionLocal
 from backend.models import Task
-from backend.task_actions import apply_task_action
+from backend.task_actions import apply_task_action, TaskConflictError
 
 log = logging.getLogger("k9x-hil.ttl_sweep")
 
@@ -64,6 +64,16 @@ def _sweep_once() -> int:
                 log.exception(
                     "[ttl_sweep] task id=%s has invalid ttl_action=%r; skipping",
                     task.id, task.ttl_action,
+                )
+                db.rollback()
+            except TaskConflictError:
+                # A human already acted on this task between this sweep's
+                # query and its write -- expected under concurrency, not a
+                # bug. The human decision stands; leave it alone.
+                log.info(
+                    "[ttl_sweep] task id=%s was already decided by a human "
+                    "since this sweep began; skipping",
+                    task.id,
                 )
                 db.rollback()
     finally:

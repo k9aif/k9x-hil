@@ -1,24 +1,34 @@
 """
-Failure-injection experiment: the compare-and-swap gap disclosed in
-Sec. V-D of the paper ("An Integrated Ecosystem for Governed Enterprise
-Agentic AI Systems").
+Failure-injection experiment: the compare-and-swap gap originally
+disclosed in Sec. V-D of the paper ("An Integrated Ecosystem for
+Governed Enterprise Agentic AI Systems") -- kept here as the historical
+record of the original finding. That gap is now closed (see
+backend/task_actions.py's guarded apply_task_action()); this script's
+injected delay was updated to target the guard's actual read-then-write
+window (previously it patched backend.routes.datetime, which stopped
+having any effect once the delay-sensitive read moved into
+task_actions.py during the fix -- silently turning this into two fast
+sequential, non-conflicting calls rather than a real race). Running
+this now demonstrates the FIXED behavior: see
+experiments/cas_guard_verification.py for the version that asserts it.
 
-`perform_action()` (backend/routes.py) does a plain read-then-write with
-no `WHERE status=` guard, no optimistic-lock column, and no row lock.
-This script calls that exact function directly -- not a reimplementation
-of its logic -- with two threads racing to apply conflicting decisions
-("complete" and "reject") to the same pending task, and reports what
-actually happens: does either commit fail, and does the final state
-reflect both decisions, one, or neither?
+`perform_action()` (backend/routes.py) delegates to
+task_actions.apply_task_action(), which now does a guarded
+UPDATE ... WHERE status = :expected_status. This script calls
+perform_action() directly -- not a reimplementation of its logic --
+with two threads racing to apply conflicting decisions ("complete" and
+"reject") to the same pending task, and reports what actually happens:
+does either commit fail, and does the final state reflect both
+decisions, one, or neither?
 
-A short sleep is injected between each thread's read and its write.
-This is the only synthetic element. `perform_action()` has no locking
-mechanism to defeat; the injected delay exists to reliably force the
-interleaving a real production race would only hit within a
-sub-millisecond window on a single local call. Everything else --
-the function called, the ORM models, the database writes -- is the
-real reference implementation, run against a disposable local
-PostgreSQL instance (never point this at a real deployment's database).
+A short sleep is injected between the guard's read (capturing
+expected_status) and its write (the guarded UPDATE). This is the only
+synthetic element; the delay exists to reliably force the interleaving
+a real production race would only hit within a sub-millisecond window
+on a single local call. Everything else -- the function called, the
+ORM models, the database writes -- is the real reference
+implementation, run against a disposable local PostgreSQL instance
+(never point this at a real deployment's database).
 
 Usage:
     createdb -h localhost -p 5432 k9x   # or any empty Postgres database
@@ -30,6 +40,8 @@ Usage:
 import threading
 import time
 from datetime import datetime, timezone
+
+from fastapi import HTTPException
 
 from backend.database import Base, SessionLocal, engine
 from backend.models import Project, Application, Queue, Task, TaskAction, User
@@ -56,37 +68,45 @@ results = {}
 
 
 def call_real_perform_action(name: str, action: str, delay_before_write_s: float):
-    """Calls the real perform_action() with an injected delay so its
-    internal read-then-write is split across a controllable window --
-    the function body executed is completely unmodified."""
+    """Calls the real perform_action() with an injected delay so the
+    guard's internal read-then-write is split across a controllable
+    window -- the function body executed is completely unmodified."""
     session = SessionLocal()
 
     # Patch time.sleep only for the duration of this call, positioned
-    # between perform_action()'s read (db.query(...).first()) and its
-    # write (db.commit()) by monkeypatching datetime.now() to also
-    # sleep -- perform_action() calls datetime.now(timezone.utc) exactly
-    # once, immediately after its read and before any field mutation.
+    # between apply_task_action()'s read (expected_status = task.status)
+    # and its guarded write (the UPDATE ... WHERE status =
+    # :expected_status) by monkeypatching datetime.now() to also sleep --
+    # apply_task_action() calls datetime.now(timezone.utc) exactly once,
+    # immediately after capturing expected_status and before building
+    # the update. Must patch task_actions.datetime specifically, not
+    # routes.datetime -- perform_action() itself no longer calls
+    # datetime.now() directly; it delegates to apply_task_action(),
+    # which does.
     real_now = datetime.now
 
     def delayed_now(*a, **kw):
         time.sleep(delay_before_write_s)
         return real_now(*a, **kw)
 
-    import backend.routes as routes_module
-    original_datetime = routes_module.datetime
+    import backend.task_actions as task_actions_module
+    original_datetime = task_actions_module.datetime
 
     class PatchedDatetime(datetime):
         @classmethod
         def now(cls, *a, **kw):
             return delayed_now(*a, **kw)
 
-    routes_module.datetime = PatchedDatetime
+    task_actions_module.datetime = PatchedDatetime
     try:
         req = TaskActionReq(action=action, actor=f"reviewer-{name}", comment=f"race experiment: {name}")
-        response = perform_action(task_id=task_id, req=req, db=session, _=_fake_actor)
-        results[name] = response
+        try:
+            response = perform_action(task_id=task_id, req=req, db=session, _=_fake_actor)
+            results[name] = response
+        except HTTPException as exc:
+            results[name] = {"ok": False, "status_code": exc.status_code, "detail": exc.detail}
     finally:
-        routes_module.datetime = original_datetime
+        task_actions_module.datetime = original_datetime
         session.close()
 
 
@@ -107,8 +127,8 @@ db = SessionLocal()
 final_task = db.query(Task).filter(Task.id == task_id).first()
 actions = db.query(TaskAction).filter(TaskAction.task_id == task_id).order_by(TaskAction.id).all()
 print(f"\nFinal Task.status in the database: {final_task.status!r}")
-print(f"TaskAction rows recorded ({len(actions)} -- both decisions are in the audit trail"
-      f" even though only one is reflected in the final status):")
+print(f"TaskAction rows recorded ({len(actions)} -- only the winning decision is "
+      f"recorded now; the loser's write never committed, per the guard):")
 for a in actions:
     print(f"  - action={a.action!r} actor={a.actor!r}")
 db.close()

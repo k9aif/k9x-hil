@@ -13,38 +13,69 @@ from typing import Optional
 from backend.models import Task, TaskAction
 
 
+class TaskConflictError(Exception):
+    """Raised when a task's status changed between when the caller read
+    it and when apply_task_action() tried to write the transition --
+    i.e. the caller lost a race with another concurrent decision on the
+    same task. The caller receives this instead of a silent no-op."""
+    pass
+
+
 def apply_task_action(db, task: Task, action: str, actor: str,
                        comment: Optional[str] = None, result: Optional[dict] = None) -> str:
-    """Mutate `task` per `action`, record a TaskAction, and commit.
+    """Atomically transition `task` per `action`, record a TaskAction,
+    and commit. Returns the resulting status.
 
-    Returns the resulting status. Callers own the session (`db`) and
-    the task's queue/db.query(Task)... lookup -- this only applies the
-    transition once a specific Task row has already been found.
+    The write is guarded by a conditional UPDATE ... WHERE id = :id AND
+    status = :expected_status, where expected_status is whatever the
+    caller's copy of `task` had when this was called. If another
+    transaction already changed the row's status (a concurrent
+    decision on the same task), the UPDATE matches zero rows and this
+    raises TaskConflictError rather than silently overwriting that
+    decision -- closing the compare-and-swap gap previously disclosed
+    for this endpoint.
+
+    Callers own the session (`db`) and the task's
+    db.query(Task)... lookup -- this only applies the transition once a
+    specific Task row has already been found.
     """
+    expected_status = task.status
     now = datetime.now(timezone.utc)
 
+    updates = {"updated_at": now}
     if action == "claim":
-        task.assigned_to = actor
-        task.status = "pending"
+        updates["assigned_to"] = actor
+        updates["status"] = "pending"
     elif action == "start":
-        task.status = "in_progress"
+        updates["status"] = "in_progress"
     elif action == "complete":
-        task.status = "completed"
-        task.completed_at = now
+        updates["status"] = "completed"
+        updates["completed_at"] = now
         if result:
-            task.result = result
+            updates["result"] = result
     elif action == "escalate":
-        task.status = "escalated"
+        updates["status"] = "escalated"
     elif action == "reject":
-        task.status = "rejected"
-        task.completed_at = now
+        updates["status"] = "rejected"
+        updates["completed_at"] = now
     elif action == "expire":
-        task.status = "expired"
-        task.completed_at = now
+        updates["status"] = "expired"
+        updates["completed_at"] = now
     else:
         raise ValueError(f"Unknown task action: {action!r}")
 
-    task.updated_at = now
+    affected = (
+        db.query(Task)
+        .filter(Task.id == task.id, Task.status == expected_status)
+        .update(updates, synchronize_session=False)
+    )
+    if affected == 0:
+        db.rollback()
+        raise TaskConflictError(
+            f"Task {task.id} was already updated since it was read "
+            f"(expected status {expected_status!r}); action {action!r} rejected"
+        )
+
     db.add(TaskAction(task_id=task.id, action=action, actor=actor, comment=comment))
     db.commit()
-    return task.status
+    return updates["status"]

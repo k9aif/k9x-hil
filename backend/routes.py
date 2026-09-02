@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction
 from backend.auth import create_access_token, get_current_user, require_admin
-from backend.task_actions import apply_task_action
+from backend.task_actions import apply_task_action, TaskConflictError
 
 router = APIRouter(prefix="/api")
 
@@ -172,6 +172,8 @@ def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_d
         status = apply_task_action(db, t, req.action, req.actor, req.comment, req.result)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except TaskConflictError as exc:
+        raise HTTPException(409, str(exc))
     return {"ok": True, "status": status}
 
 

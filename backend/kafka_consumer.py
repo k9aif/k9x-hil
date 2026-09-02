@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -8,6 +9,49 @@ from backend.database import SessionLocal
 from backend.models import Queue, Task, TaskAction
 
 log = logging.getLogger("k9x-hil.kafka_consumer")
+
+_dlq_producer = None  # lazily started; see _get_dlq_producer()
+
+
+async def _get_dlq_producer():
+    """Lazily start (once) and return the shared AIOKafkaProducer used to
+    publish dead-lettered messages. Previously, dead-letter routing was
+    disclosed in the paper as implemented ("routed to per-topic
+    dead-letter queues following the convention {topic}.dlq") but no
+    such routing existed anywhere in this file -- a malformed message
+    was either silently dropped (unregistered topic) or, for bad JSON
+    specifically, propagated all the way out of the `async for` loop
+    and killed the entire consumer's connection (see run_consumer()'s
+    reconnect-loop comment below), not isolated to the one bad message.
+    This implements the routing the disclosure described."""
+    global _dlq_producer
+    if _dlq_producer is None:
+        from aiokafka import AIOKafkaProducer
+        broker = os.getenv("KAFKA_BROKER", "localhost:9092")
+        _dlq_producer = AIOKafkaProducer(bootstrap_servers=[broker])
+        await _dlq_producer.start()
+    return _dlq_producer
+
+
+async def _publish_to_dlq(topic: str, raw_value: bytes, reason: str) -> None:
+    """Publish a malformed/invalid inbound message to {topic}.dlq,
+    preserving the original raw bytes (undecoded, so even non-UTF-8 or
+    non-JSON payloads survive intact) plus enough metadata to diagnose
+    why it was dead-lettered without needing the original producer."""
+    dlq_topic = f"{topic}.dlq"
+    envelope = {
+        "original_topic": topic,
+        "reason": reason,
+        "dead_lettered_at": datetime.now(timezone.utc).isoformat(),
+        "raw_value_b64": base64.b64encode(raw_value).decode("ascii"),
+    }
+    try:
+        producer = await _get_dlq_producer()
+        await producer.send_and_wait(dlq_topic, json.dumps(envelope).encode("utf-8"))
+        log.warning("[kafka_consumer] dead-lettered malformed message from topic=%s to %s (reason=%s)",
+                    topic, dlq_topic, reason)
+    except Exception:
+        log.exception("[kafka_consumer] failed to publish to dead-letter topic=%s", dlq_topic)
 
 
 def _ingest_message(topic: str, message: dict) -> None:
@@ -130,7 +174,13 @@ async def run_consumer() -> None:
             # auto_offset_reset only applies when no valid offset exists yet.
             auto_offset_reset="earliest",
             enable_auto_commit=True,
-            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            # No value_deserializer: parsing happens per-message below so a
+            # single malformed message is dead-lettered and skipped, rather
+            # than raising out of aiokafka's own deserialization step
+            # straight through this loop and killing the whole connection
+            # (see run_consumer()'s docstring incident above -- that failure
+            # mode is exactly what a deserializer-level exception would
+            # cause; a per-message decode is what makes it isolated).
         )
 
         try:
@@ -139,7 +189,18 @@ async def run_consumer() -> None:
             backoff_s = 2  # reset once a connection actually succeeds
             async for msg in consumer:
                 try:
-                    _ingest_message(msg.topic, msg.value)
+                    try:
+                        value = json.loads(msg.value.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        await _publish_to_dlq(msg.topic, msg.value, f"invalid JSON: {exc}")
+                        continue
+                    if not isinstance(value, dict):
+                        await _publish_to_dlq(
+                            msg.topic, msg.value,
+                            f"message body is not a JSON object (got {type(value).__name__})",
+                        )
+                        continue
+                    _ingest_message(msg.topic, value)
                 except Exception:
                     log.exception("[kafka_consumer] error handling message on topic=%s", msg.topic)
         except Exception:
