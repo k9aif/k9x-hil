@@ -22,7 +22,7 @@ case "$cmd" in
   build)
     echo "Building $IMAGE ..."
     cd "$PROJECT_DIR"
-    sudo podman build -t "$IMAGE" -f RHEL/Containerfile .
+    sudo podman build -t "$IMAGE" -f ubuntu/Containerfile .
     echo "Build complete: $IMAGE"
     ;;
 

@@ -2,7 +2,7 @@
 # Single container, no pod needed.
 #
 # Build:
-#   podman build -t k9x-hil:latest -f RHEL/Containerfile .
+#   podman build -t k9x-hil:latest -f ubuntu/Containerfile .
 #
 # Run:
 #   podman run -d --name k9x-hil -p 8086:8086 --env-file .env k9x-hil:latest
