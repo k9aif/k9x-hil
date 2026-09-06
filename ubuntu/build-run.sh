@@ -32,6 +32,7 @@ case "$cmd" in
     sudo podman rm -f "$CONTAINER" 2>/dev/null || true
     sudo podman run -d \
       --name "$CONTAINER" \
+      --restart=always \
       -p 8086:8086 \
       --env-file "$ENV_FILE" \
       "$IMAGE"
