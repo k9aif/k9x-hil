@@ -605,6 +605,60 @@ async function loadDocumentPreview(taskId) {
   }
 }
 
+// Any orchestrator's agent can put anything in Task.payload -- these are
+// just common shapes worth special-casing so a human doesn't have to parse
+// JSON to find the one sentence that explains the task. Everything else
+// still falls through to a plain label/value table.
+const PAYLOAD_NARRATIVE_KEYS = ["fraud_rationale", "rationale", "agent_rationale", "explanation"];
+const PAYLOAD_SKIP_KEYS = ["correlation_id"]; // already shown in the Details grid above
+
+function humanizeKey(k) {
+  return k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function formatPayloadScalar(key, val) {
+  if (typeof val === "number") {
+    return /amount|price|cost|exposure/i.test(key) ? "$" + val.toLocaleString() : val.toLocaleString();
+  }
+  if (typeof val === "object") return JSON.stringify(val);
+  return String(val);
+}
+
+function renderPayloadSection(payload) {
+  const entries = Object.entries(payload).filter(
+    ([k, v]) => v !== null && v !== undefined && v !== "" && !PAYLOAD_SKIP_KEYS.includes(k)
+  );
+  if (!entries.length) return "";
+
+  const narrative = entries.find(([k]) => PAYLOAD_NARRATIVE_KEYS.includes(k));
+  const tagGroups = entries.filter(([k, v]) => Array.isArray(v) && (!narrative || k !== narrative[0]));
+  const rows = entries.filter(([k, v]) =>
+    !Array.isArray(v) && (!narrative || k !== narrative[0])
+  );
+
+  let html = `<div class="modal-section"><div class="modal-section-title">Payload (from agent)</div>`;
+
+  if (narrative) {
+    html += `<div class="modal-why">${esc(String(narrative[1]))}</div>`;
+  }
+
+  for (const [k, arr] of tagGroups) {
+    html += `<div class="modal-kv-label" style="margin-bottom:4px">${esc(humanizeKey(k))}</div>
+      <div class="signal-tags">${arr.map(v => `<span class="signal-tag">${esc(String(v))}</span>`).join("")}</div>`;
+  }
+
+  if (rows.length) {
+    html += `<div class="modal-kv" style="${tagGroups.length ? 'margin-top:8px' : ''}">` +
+      rows.map(([k, v]) =>
+        `<span class="modal-kv-label">${esc(humanizeKey(k))}</span><span class="modal-kv-value">${esc(formatPayloadScalar(k, v))}</span>`
+      ).join("") +
+      `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
 function taskDetailHtml(t) {
   const isMyTask = currentUser && t.assigned_to === currentUser.email;
   const isAdmin  = currentUser && currentUser.role === "admin";
@@ -650,10 +704,7 @@ function taskDetailHtml(t) {
   `;
 
   if (t.payload) {
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Payload (from agent)</div>
-      <div class="modal-payload">${esc(JSON.stringify(t.payload, null, 2))}</div>
-    </div>`;
+    html += renderPayloadSection(t.payload);
   }
 
   if (t.artifacts && t.artifacts.length > 0) {
