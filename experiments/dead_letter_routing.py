@@ -41,6 +41,7 @@ Usage:
 import asyncio
 import base64
 import json
+import os
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
@@ -51,7 +52,7 @@ from backend.kafka_consumer import run_consumer
 
 TOPIC = "dlq.experiment.topic"
 DLQ_TOPIC = f"{TOPIC}.dlq"
-BROKER = "localhost:9092"
+BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
 
 
 async def main():
