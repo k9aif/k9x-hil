@@ -1,0 +1,15 @@
+{
+  "description": "Creates a task with a due_date already one hour in the past, runs one real sweep pass (_sweep_once(), the exact function the background loop calls), and confirms the task is auto-actioned with the correct audit trail.",
+  "generated_at_utc": "2026-09-08T01:32:45Z",
+  "commit_sha": "8c128918de720d38fd92187d92143d1efb72e1cf",
+  "invocation": "PYTHONPATH=. python3 experiments/ttl_sweep_demo.py",
+  "environment": "local disposable PostgreSQL",
+  "result": {
+    "task_id": 1,
+    "tasks_actioned_by_sweep": 1,
+    "final_status": "rejected",
+    "audit_actor": "system:ttl_sweep",
+    "audit_comment": "TTL expired (due_date=2026-09-07T21:32:10.135125)"
+  },
+  "outcome": "PASS -- TTL sweep correctly auto-rejected the expired task."
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Delivers an identical Kafka message (same correlation_id) twice to the real _ingest_message() ingest path, directly simulating Kafka's at-least-once redelivery, and confirms exactly one Task row results.",
+  "generated_at_utc": "2026-09-08T01:32:30Z",
+  "commit_sha": "8c128918de720d38fd92187d92143d1efb72e1cf",
+  "invocation": "PYTHONPATH=. python3 experiments/idempotent_ingest.py",
+  "environment": "local disposable PostgreSQL",
+  "result": {
+    "correlation_id_delivered_count": 2,
+    "task_rows_created": 1,
+    "task_id": 1,
+    "task_title": "Duplicate-delivery experiment task"
+  },
+  "outcome": "PASS -- dedup-on-correlation_id held under simulated at-least-once redelivery."
+}

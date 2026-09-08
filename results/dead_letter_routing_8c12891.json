@@ -1,0 +1,27 @@
+{
+  "description": "Publishes an invalid-JSON message and a syntactically-valid-but-non-object JSON message (a bare array) to a real topic the real run_consumer() is subscribed to, against a live Kafka-compatible broker, and confirms both are dead-lettered rather than dropped or crashing the consumer.",
+  "generated_at_utc": "2026-09-08T01:40:00Z",
+  "commit_sha": "8c128918de720d38fd92187d92143d1efb72e1cf",
+  "invocation": "KAFKA_BROKER=<broker-host>:9092 PYTHONPATH=. python3 experiments/dead_letter_routing.py",
+  "environment": "local disposable PostgreSQL; live remote Kafka-compatible broker (dead-letter routing correctness has no timing-race sensitivity, unlike the CAS experiments, so a remote broker introduces no methodological confound)",
+  "result": {
+    "messages_published": ["invalid JSON bytes", "valid JSON, non-object (bare array)"],
+    "dlq_messages": [
+      {
+        "reason": "invalid JSON: Expecting property name enclosed in double quotes: line 1 column 33 (char 32)",
+        "original_topic": "dlq.experiment.topic",
+        "original_bytes_recovered": "{\"title\": \"broken\", \"payload\": {bad json here"
+      },
+      {
+        "reason": "message body is not a JSON object (got list)",
+        "original_topic": "dlq.experiment.topic",
+        "original_bytes_recovered": "[\"this\", \"is\", \"an\", \"array\", \"not\", \"an\", \"object\"]"
+      }
+    ],
+    "tasks_created_from_malformed_messages": 0,
+    "consumer_survived": true,
+    "valid_message_after_became_real_task": true,
+    "valid_message_task_id": 1
+  },
+  "outcome": "PASS -- both malformed messages dead-lettered with recoverable original bytes, no Task created for either, consumer connection survived, confirmed by a valid message immediately after becoming a real Task."
+}

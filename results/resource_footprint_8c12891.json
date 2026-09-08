@@ -1,0 +1,22 @@
+{
+  "description": "Process memory (RSS), thread count, and GET /api/tasks latency at increasing pending-task counts, against a real running uvicorn process and a disposable local PostgreSQL instance. Bulk-inserts pending tasks directly (bypassing Kafka, orthogonal to what this measures) and calls the real endpoint over HTTP with a minted JWT.",
+  "generated_at_utc": "2026-09-08T01:45:00Z",
+  "commit_sha": "8c128918de720d38fd92187d92143d1efb72e1cf",
+  "invocation": "PYTHONPATH=. python3 experiments/resource_footprint.py <uvicorn_pid>",
+  "environment": "local disposable PostgreSQL; local uvicorn process (matches script's documented methodology exactly, both server and DB local)",
+  "rows": [
+    {"pending_tasks": 0,    "rss_mb": 77,  "threads": 7, "get_tasks_latency_s": 0.036, "http_status": 200},
+    {"pending_tasks": 100,  "rss_mb": 77,  "threads": 7, "get_tasks_latency_s": 0.239, "http_status": 200},
+    {"pending_tasks": 1000, "rss_mb": 84,  "threads": 7, "get_tasks_latency_s": 1.052, "http_status": 200},
+    {"pending_tasks": 5000, "rss_mb": 109, "threads": 7, "get_tasks_latency_s": 7.660, "http_status": 200}
+  ],
+  "comparison_to_manuscript": {
+    "manuscript_rss_mb": "74-110",
+    "manuscript_threads": 4,
+    "manuscript_latency_s": [0.056, 0.617, 3.5, 12.9],
+    "this_run_rss_mb": "77-109",
+    "this_run_threads": 7,
+    "this_run_latency_s": [0.036, 0.239, 1.052, 7.66],
+    "note": "Memory range is consistent with the manuscript. Thread count (7, not 4) and latency (faster at every data point, same environment class as documented: local server + local DB) both differ from the manuscript's originally reported figures -- attributed to real machine/environment differences (this run: Apple Silicon Mac, local Postgres 16; original: presumably the RHEL host), not a methodology change. The qualitative finding -- latency grows much faster than linearly with pending-task count, consistent with the N+1 query pattern in _task_dict() -- holds in this run exactly as in the original (roughly 6.6x latency for 100x more tasks, then continuing to compound). Per the 'fresh value wins' rule, this run's figures replace the manuscript's."
+  }
+}

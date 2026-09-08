@@ -1,0 +1,14 @@
+{
+  "description": "Historical-record script (kept per its own docstring): same race/injection technique as cas_guard_verification.py, run against the current (fixed) code. Demonstrates the guard's effect via perform_action()'s actual HTTP-level return values rather than the internal assertion cas_guard_verification.py uses.",
+  "generated_at_utc": "2026-09-08T01:33:00Z",
+  "commit_sha": "8c128918de720d38fd92187d92143d1efb72e1cf",
+  "invocation": "PYTHONPATH=. python3 experiments/cas_race_condition.py",
+  "environment": "local disposable PostgreSQL",
+  "result": {
+    "winner": "B-reject",
+    "loser_response": {"ok": false, "status_code": 409, "detail": "Task 1 was already updated since it was read (expected status 'pending'); action 'complete' rejected"},
+    "final_status": "rejected",
+    "task_action_rows": 1
+  },
+  "outcome": "PASS -- exactly one decision committed, the loser received an explicit 409, consistent with cas_guard_verification.py's result."
+}
