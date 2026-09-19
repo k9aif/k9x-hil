@@ -224,5 +224,52 @@ def seed():
                               comment="Ambiguous flood coverage language in zone X — needs manager review"))
 
         db.commit()
+
+        # ── Process Studio Implementations / accounts_payable ──────────
+        # Registration only — deliberately no example Tasks. The generated
+        # HILAgent in this scaffold isn't wired to actually publish Tasks
+        # yet (it's a dead, unwired LLM-call stub as of 2026-09-19), so
+        # seeding fake Task rows here would misrepresent real system state.
+        # This app should show 0 active until that wiring is built for real.
+        if not db.query(Project).filter(Project.name == "Process Studio Implementations").first():
+            db.add(Project(name="Process Studio Implementations",
+                            description="Real implementations built from IBM Process Studio blueprints via K9X Studio — see github.com/k9aif/k9x-process-studio-implementations"))
+        db.commit()
+
+        psi_proj = db.query(Project).filter(Project.name == "Process Studio Implementations").first()
+
+        if not db.query(Application).filter(Application.name == "accounts_payable", Application.project_id == psi_proj.id).first():
+            db.add(Application(project_id=psi_proj.id, name="accounts_payable",
+                                description="Accounts Payable & Expense Reimbursements — 7 use cases, Zero Trust + k9x_Shield + Guardian verified live on each"))
+        db.commit()
+
+        ap_app = db.query(Application).filter(Application.name == "accounts_payable", Application.project_id == psi_proj.id).first()
+
+        ap_queues_data = [
+            dict(application_id=ap_app.id, name="Matching Exceptions",
+                 description="ATS4 — AP Specialist validates the agent's recommended resolution for a PO/invoice matching exception.",
+                 topic="workflow.hil.processstudio.accountspayable.matching-exceptions",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=ap_app.id, name="GL Coding Review",
+                 description="ATS5 — AP Specialist verifies ambiguous GL account codes the agent couldn't classify above the 94% confidence gate.",
+                 topic="workflow.hil.processstudio.accountspayable.gl-coding",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=ap_app.id, name="Anomaly Review",
+                 description="ATS6 — AP Manager + Internal Audit review a RED-scored invoice flagged by the anomaly detection loop; always blocks auto-payment.",
+                 topic="workflow.hil.processstudio.accountspayable.anomaly-review",
+                 ttl_hours=72, ttl_action="escalate"),
+            dict(application_id=ap_app.id, name="Expense Policy Review",
+                 description="ATS12 — Finance Manager reviews an expense report flagged for a policy violation.",
+                 topic="workflow.hil.processstudio.accountspayable.expense-audit",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=ap_app.id, name="Vendor Master Verification",
+                 description="ATS13 — AP Supervisor independently verifies a vendor master change, especially bank detail updates.",
+                 topic="workflow.hil.processstudio.accountspayable.vendor-master",
+                 ttl_hours=168, ttl_action="reject"),
+        ]
+        for q in ap_queues_data:
+            if not db.query(Queue).filter(Queue.topic == q["topic"]).first():
+                db.add(Queue(**q))
+        db.commit()
     finally:
         db.close()
