@@ -23,11 +23,32 @@ _WEBUI  = _ROOT / "webui"
 _STATIC = _WEBUI / "static"
 _INDEX  = _WEBUI / "index.html"
 
+
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles that always sends an explicit Cache-Control header.
+
+    The origin previously sent none for /static/* -- which let Cloudflare's
+    own default Browser Cache TTL (commonly 4h for .js/.css) silently take
+    over, so a rebuilt app.js could sit invisible in someone's browser for
+    hours after a real deploy (confirmed live, 2026-09-19: identical etag/
+    last-modified/content-length from both hil.k9x.ai and the origin IP --
+    the server was never stale, only browsers were). An explicit origin
+    Cache-Control overrides that Cloudflare default. no-cache (not no-store)
+    still lets ETag-based conditional GETs return a cheap 304, so this costs
+    almost nothing while guaranteeing every load revalidates.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 app = FastAPI(title="k9x HIL", version="1.0.0")
 app.include_router(router)
 
 if _STATIC.exists():
-    app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=str(_STATIC)), name="static")
 
 
 @app.on_event("startup")
