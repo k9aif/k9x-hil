@@ -306,7 +306,9 @@ function renderDashboard() {
   const statusCounts = { pending: d.pending, in_progress: d.in_progress, completed: d.completed, escalated: d.escalated, rejected: d.rejected };
   const pieHtml = renderPieChart(statusCounts);
 
-  // Queue summary table with ending-soon counts
+  // Queue summary table with ending-soon counts, grouped by Application with
+  // a subtotal row per app (Active/Ending<24h summed across its queues) so
+  // the per-app rollup is visible at a glance without losing per-queue detail.
   const queueRows = allQueues.map(q => {
     const qTasks = allTasks.filter(t => t.queue_name === q.name);
     const active = qTasks.filter(t => ["pending","in_progress"].includes(t.status)).length;
@@ -317,6 +319,31 @@ function renderDashboard() {
     }).length;
     return { name: q.name, app: q.application, topic: q.topic, active, ending24h, appId: q.application_id, queueId: q.id };
   });
+
+  const appGroups = new Map(); // appId -> { app, rows: [] }
+  for (const r of queueRows) {
+    if (!appGroups.has(r.appId)) appGroups.set(r.appId, { app: r.app, rows: [] });
+    appGroups.get(r.appId).rows.push(r);
+  }
+  const sortedApps = [...appGroups.entries()].sort((a, b) => a[1].app.localeCompare(b[1].app));
+
+  const groupsHtml = sortedApps.map(([appId, group]) => {
+    const rows = [...group.rows].sort((a, b) => a.name.localeCompare(b.name));
+    const subActive = rows.reduce((s, r) => s + r.active, 0);
+    const subEnding = rows.reduce((s, r) => s + r.ending24h, 0);
+    const subtotalRow = `<tr class="dash-app-subtotal" onclick="filterByApplication(${appId},'${esc(group.app)}')">
+      <td class="dash-app-name" colspan="2">${esc(group.app)}</td>
+      <td class="dash-qt-count">${subActive}</td>
+      <td class="dash-qt-urgent${subEnding > 0 ? ' dash-qt-red' : ''}">${subEnding > 0 ? subEnding : '—'}</td>
+    </tr>`;
+    const detailRows = rows.map(r => `<tr class="dash-queue-row" onclick="event.stopPropagation(); filterByQueue(${r.queueId},'${esc(r.name)}')">
+      <td class="dash-qt-name dash-qt-nested">${esc(r.name)}</td>
+      <td></td>
+      <td class="dash-qt-count">${r.active}</td>
+      <td class="dash-qt-urgent${r.ending24h > 0 ? ' dash-qt-red' : ''}">${r.ending24h > 0 ? r.ending24h : '—'}</td>
+    </tr>`).join("");
+    return subtotalRow + detailRows;
+  }).join("");
 
   let html = `<div class="dash-overview">
     <div class="dash-pie-section">
@@ -330,12 +357,7 @@ function renderDashboard() {
           <th>Queue</th><th>Application</th><th>Active</th><th>Ending &lt;24h</th>
         </tr></thead>
         <tbody>
-          ${queueRows.map(r => `<tr class="dash-queue-row" onclick="filterByQueue(${r.queueId},'${esc(r.name)}')">
-            <td class="dash-qt-name">${esc(r.name)}</td>
-            <td class="dash-qt-app">${esc(r.app)}</td>
-            <td class="dash-qt-count">${r.active}</td>
-            <td class="dash-qt-urgent${r.ending24h > 0 ? ' dash-qt-red' : ''}">${r.ending24h > 0 ? r.ending24h : '—'}</td>
-          </tr>`).join("")}
+          ${groupsHtml}
         </tbody>
       </table>
     </div>
@@ -530,6 +552,22 @@ async function filterByQueue(queueId, queueName) {
   document.getElementById("alltask-list").innerHTML = allTasks.length
     ? allTasks.map(t => taskCardHtml(t)).join("")
     : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks in this queue</div></div>';
+}
+
+async function filterByApplication(applicationId, appName) {
+  switchTab("alltasks");
+  try {
+    const r = await authFetch("/api/tasks?application_id=" + applicationId);
+    allTasks = await r.json();
+  } catch { allTasks = []; }
+  document.getElementById("header-tab-title").textContent = appName;
+  document.getElementById("alltask-filters").innerHTML = `
+    <button class="filter-btn active">${esc(appName)} (all queues)</button>
+    <button class="filter-btn" onclick="switchTab('alltasks')">← All Tasks</button>
+  `;
+  document.getElementById("alltask-list").innerHTML = allTasks.length
+    ? allTasks.map(t => taskCardHtml(t)).join("")
+    : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks for this application</div></div>';
 }
 
 // ── Filter bar ──────────────────────────────────────────────────────────────

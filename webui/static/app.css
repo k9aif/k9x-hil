@@ -404,6 +404,12 @@ body.dark .pie-wrap svg { filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
 .dash-qt-urgent { text-align: center; color: var(--muted); }
 .dash-qt-red { color: var(--red); font-weight: 700; }
 
+.dash-app-subtotal { cursor: pointer; transition: background 0.15s; background: var(--accent-dim); }
+.dash-app-subtotal:hover { background: var(--accent-dim-hover, var(--accent-dim)); }
+.dash-app-subtotal td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.dash-app-name { font-weight: 700; color: var(--text); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+.dash-qt-nested { font-weight: 500; color: var(--muted); padding-left: 22px !important; }
+
 /* ── Dashboard — Queue-centric layout ────────────────────────────────────── */
 .dash-project-header {
   display: flex; align-items: center; gap: 8px; margin-top: 24px; margin-bottom: 12px;
