@@ -271,5 +271,19 @@ def seed():
             if not db.query(Queue).filter(Queue.topic == q["topic"]).first():
                 db.add(Queue(**q))
         db.commit()
+
+        # Missed on the first pass: every other app in this file assigns
+        # itself to ravi/demo/admin's .applications (that's what makes it
+        # show up in the sidebar's PROJECT tree and in their login response's
+        # "applications" list) — accounts_payable wasn't, so it never
+        # appeared there even though it correctly showed up in Queue Summary
+        # (which queries Queue/Task directly, unfiltered by user).
+        if ravi and ap_app not in ravi.applications:
+            ravi.applications.append(ap_app)
+        if demo and ap_app not in demo.applications:
+            demo.applications.append(ap_app)
+        if admin and ap_app not in admin.applications:
+            admin.applications.append(ap_app)
+        db.commit()
     finally:
         db.close()

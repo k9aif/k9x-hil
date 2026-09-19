@@ -178,7 +178,7 @@ async function loadQueues() {
 
 // ── Tab switching ───────────────────────────────────────────────────────────
 
-function switchTab(tab) {
+function switchTab(tab, skipLoad) {
   activeTab = tab;
   activeAppId = null;
   taskFilter = "all";
@@ -206,6 +206,17 @@ function switchTab(tab) {
     "admin-queues": "Queues & Topics", "admin-audit": "Audit Log"
   };
   document.getElementById("header-tab-title").textContent = titles[tab] || tab;
+
+  // skipLoad: the caller (filterByQueue/filterByApplication) is about to do
+  // its own, more specific fetch immediately after this call and render the
+  // result directly. Without this, "alltasks"'s unconditional, unawaited
+  // loadTasks().then(render) below raced against that more specific fetch —
+  // whichever resolved LAST won, so a slower unfiltered full-task-list fetch
+  // could silently overwrite an already-rendered, correctly-filtered view
+  // (right title, wrong — unrelated — task list). Real bug, found live: a
+  // queue with 0 tasks (fast, empty response) filtered correctly, then the
+  // full list (slower, larger) landed after and stomped it.
+  if (skipLoad) return;
 
   if (tab === "dashboard") loadAll();
   else if (tab === "alltasks") { loadTasks().then(() => render()); }
@@ -539,7 +550,7 @@ function renderQueues() {
 }
 
 async function filterByQueue(queueId, queueName) {
-  switchTab("alltasks");
+  switchTab("alltasks", true);
   try {
     const r = await authFetch("/api/tasks?queue_id=" + queueId);
     allTasks = await r.json();
@@ -555,7 +566,7 @@ async function filterByQueue(queueId, queueName) {
 }
 
 async function filterByApplication(applicationId, appName) {
-  switchTab("alltasks");
+  switchTab("alltasks", true);
   try {
     const r = await authFetch("/api/tasks?application_id=" + applicationId);
     allTasks = await r.json();
