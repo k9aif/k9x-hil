@@ -10,7 +10,7 @@ rather than two independently-maintained copies that could drift.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from backend.hil_reply import publish_hil_reply
+from backend.hil_reply import attempt_publish, enqueue_hil_reply
 from backend.models import Task, TaskAction
 
 _TERMINAL_DECISION_ACTIONS = {"complete", "reject", "expire"}
@@ -107,17 +107,27 @@ def apply_task_action(db, task: Task, action: str, actor: str,
         )
 
     db.add(TaskAction(task_id=task.id, action=action, actor=actor, comment=comment))
+
+    # G-14: the outbox row is written in the *same* transaction as the
+    # status change -- commits together with it below, or not at all.
+    # This is what makes the reply durable even if the process crashes
+    # or Kafka is unreachable right after: the decision and the record
+    # of "this still owes a reply" either both land or neither does.
+    outbox_row = None
+    if action in _TERMINAL_DECISION_ACTIONS:
+        outbox_row = enqueue_hil_reply(
+            db, task_id=task.id, reply_to=reply_to, correlation_id=correlation_id,
+            action=action, actor=actor, status=updates["status"],
+            comment=comment, result=result,
+        )
+
     db.commit()
 
-    if action in _TERMINAL_DECISION_ACTIONS:
-        publish_hil_reply(
-            reply_to=reply_to,
-            correlation_id=correlation_id,
-            action=action,
-            actor=actor,
-            status=updates["status"],
-            comment=comment,
-            result=result,
-        )
+    if outbox_row is not None:
+        # Best-effort immediate send -- the common case (Kafka up) never
+        # waits for outbox_sweep.py's next pass. A failure here is
+        # already handled inside attempt_publish() (logged, row stays
+        # "pending", never raises) -- the sweep picks it up from there.
+        attempt_publish(db, outbox_row)
 
     return updates["status"]

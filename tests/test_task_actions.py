@@ -70,15 +70,16 @@ def test_complete_publishes_to_reply_to():
     db.add(task)
     db.commit()
 
-    with patch("backend.task_actions.publish_hil_reply") as mock_publish:
+    with patch("backend.task_actions.enqueue_hil_reply") as mock_enqueue, \
+         patch("backend.task_actions.attempt_publish"):
         status = apply_task_action(db, task, "complete", "reviewer@bank.example",
                                     comment="approved", result={"decision": "approve"})
 
     check("status transitions to completed", status == "completed", status)
-    check("publish_hil_reply called once", mock_publish.call_count == 1,
-          f"called {mock_publish.call_count} times")
-    if mock_publish.call_count == 1:
-        kwargs = mock_publish.call_args.kwargs
+    check("enqueue_hil_reply called once", mock_enqueue.call_count == 1,
+          f"called {mock_enqueue.call_count} times")
+    if mock_enqueue.call_count == 1:
+        kwargs = mock_enqueue.call_args.kwargs
         check("correct correlation_id", kwargs["correlation_id"] == "corr-123", kwargs)
         check("correct reply_to", kwargs["reply_to"] == "hil.replies.fraudorchestrator", kwargs)
         check("correct action", kwargs["action"] == "complete", kwargs)
@@ -94,11 +95,11 @@ def test_claim_does_not_publish():
     db.add(task)
     db.commit()
 
-    with patch("backend.task_actions.publish_hil_reply") as mock_publish:
+    with patch("backend.task_actions.enqueue_hil_reply") as mock_enqueue:
         apply_task_action(db, task, "claim", "reviewer@bank.example")
 
-    check("claim does not publish", mock_publish.call_count == 0,
-          f"called {mock_publish.call_count} times")
+    check("claim does not enqueue a reply", mock_enqueue.call_count == 0,
+          f"called {mock_enqueue.call_count} times")
 
 
 def test_escalate_does_not_publish():
@@ -110,11 +111,11 @@ def test_escalate_does_not_publish():
     db.add(task)
     db.commit()
 
-    with patch("backend.task_actions.publish_hil_reply") as mock_publish:
+    with patch("backend.task_actions.enqueue_hil_reply") as mock_enqueue:
         apply_task_action(db, task, "escalate", "reviewer@bank.example")
 
-    check("escalate does not publish", mock_publish.call_count == 0,
-          f"called {mock_publish.call_count} times")
+    check("escalate does not enqueue a reply", mock_enqueue.call_count == 0,
+          f"called {mock_enqueue.call_count} times")
 
 
 def test_escalate_extends_due_date_5_days_from_now_when_overdue():
@@ -180,8 +181,9 @@ def test_escalate_handles_timezone_naive_due_date_without_raising():
 def test_missing_reply_to_does_not_raise():
     """A task with no reply_to/correlation_id (not created from the
     Kafka-driven HIL flow) must not break the status transition itself --
-    publish_hil_reply's own no-op guard handles this, proven for real
-    here rather than just mocked away."""
+    enqueue_hil_reply's own no-op guard handles this, proven for real
+    here (no mocking -- this goes through the actual enqueue/attempt
+    path) rather than just assumed."""
     db = _make_session()
     task = Task(title="Manually entered review", status="pending")
     db.add(task)
@@ -216,14 +218,14 @@ def test_conflict_still_raises_and_never_publishes():
     # look like the moment before it tries to act on it.
 
     raised = False
-    with patch("backend.task_actions.publish_hil_reply") as mock_publish:
+    with patch("backend.task_actions.enqueue_hil_reply") as mock_enqueue:
         try:
             apply_task_action(db, task, "reject", "reviewer@bank.example")
         except TaskConflictError:
             raised = True
     check("TaskConflictError still raised on lost race", raised)
-    check("no publish on a conflicted (non-applied) action",
-          mock_publish.call_count == 0, f"called {mock_publish.call_count} times")
+    check("no reply enqueued on a conflicted (non-applied) action",
+          mock_enqueue.call_count == 0, f"called {mock_enqueue.call_count} times")
 
 
 def main() -> int:

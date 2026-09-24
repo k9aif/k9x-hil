@@ -17,6 +17,7 @@ from backend.routes import router
 from backend.seed import seed
 from backend.kafka_consumer import run_consumer
 from backend.ttl_sweep import run_ttl_sweep
+from backend.outbox_sweep import run_outbox_sweep
 
 _ROOT   = Path(__file__).resolve().parent
 _WEBUI  = _ROOT / "webui"
@@ -59,6 +60,7 @@ async def startup():
     seed()
     asyncio.create_task(run_consumer())
     asyncio.create_task(run_ttl_sweep())
+    asyncio.create_task(run_outbox_sweep())
 
 
 @app.get("/health")

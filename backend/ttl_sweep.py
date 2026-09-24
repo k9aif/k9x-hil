@@ -14,10 +14,17 @@ ttl_action via the same apply_task_action() the human-driven
 human-driven rejection are indistinguishable in the audit trail except
 for the actor field.
 
-Only PENDING tasks are swept. A task already CLAIMED (assigned_to set,
-still status=pending in this schema) or IN_PROGRESS is presumed to
-have a human actively engaged and is left alone; TTL exists to catch
-tasks nobody has touched, not to override an active review.
+PENDING and ESCALATED tasks are swept (G-15 -- escalated was originally
+omitted entirely, which meant the 5-day due_date extension escalate now
+gets, see task_actions.py, was never actually enforced; an escalated task
+just stayed open forever). A task already CLAIMED (assigned_to set, still
+status=pending in this schema) or IN_PROGRESS is presumed to have a human
+actively engaged and is left alone -- TTL exists to catch tasks nobody
+has touched, not to override an active review. ESCALATED is different
+from IN_PROGRESS in exactly this respect: it means the task is waiting
+for a *different*, higher-authority reviewer, not that someone is
+actively working it right now -- it needs the same due_date safety net
+PENDING does, for the same reason.
 """
 import asyncio
 import logging
@@ -40,7 +47,7 @@ def _sweep_once() -> int:
         now = datetime.now(timezone.utc)
         expired = (
             db.query(Task)
-            .filter(Task.status == "pending")
+            .filter(Task.status.in_(["pending", "escalated"]))
             .filter(Task.due_date.isnot(None))
             .filter(Task.due_date < now)
             .all()

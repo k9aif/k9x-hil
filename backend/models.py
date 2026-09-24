@@ -118,3 +118,40 @@ class TaskAction(Base):
     actor      = Column(String(255))
     comment    = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class HilReplyOutbox(Base):
+    """Transactional outbox for terminal HIL decisions (G-14).
+
+    A row is written in the *same* transaction as the Task status change
+    (see task_actions.apply_task_action()) -- either both persist or
+    neither does, so a decision can never exist in Postgres without a
+    durable record of the reply it still owes Kafka. The event column is
+    the exact, frozen payload to publish -- built once at decision time,
+    never recomputed, so a retry sends byte-identical content regardless
+    of how many attempts it takes.
+
+    status: "pending" (not yet successfully sent) | "published" (sent
+    at least once -- see idempotency note below).
+
+    Idempotency: republishing after a failure can, in a narrow race, send
+    the same correlation_id twice (an immediate attempt and a sweep pass
+    overlapping). Not a problem here -- K9EventRouter._on_hil_reply()
+    already resolves by correlation_id against hil_pending and drops
+    anything that doesn't match a pending row (already resolved, or
+    unknown), so a duplicate is a harmless no-op on the consumer side,
+    not a bug this table needs to prevent outright.
+    """
+    __tablename__ = "hil_reply_outbox"
+    __table_args__ = {"schema": _SCHEMA}
+
+    id              = Column(Integer, primary_key=True, index=True)
+    task_id         = Column(Integer, ForeignKey(f"{_SCHEMA}.tasks.id", ondelete="CASCADE"), nullable=False)
+    correlation_id  = Column(String(255), nullable=False, index=True)
+    reply_to        = Column(String(255), nullable=False)
+    event           = Column(JSON, nullable=False)
+    status          = Column(String(20), nullable=False, default="pending")
+    attempts        = Column(Integer, nullable=False, default=0)
+    created_at      = Column(DateTime, server_default=func.now())
+    last_attempt_at = Column(DateTime)
+    published_at    = Column(DateTime)
