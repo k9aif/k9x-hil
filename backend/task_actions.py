@@ -7,7 +7,7 @@ transitions. Used by both the human-driven HTTP path
 human-driven action apply the exact same status/audit semantics
 rather than two independently-maintained copies that could drift.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from backend.hil_reply import publish_hil_reply
@@ -69,6 +69,22 @@ def apply_task_action(db, task: Task, action: str, actor: str,
             updates["result"] = result
     elif action == "escalate":
         updates["status"] = "escalated"
+        # Escalating hands this to someone with more authority -- they
+        # need real time to act, not whatever was left on the original
+        # TTL (which may already be near, or past, expiry -- often *why*
+        # it got escalated in the first place). Extend from whichever is
+        # later, the existing due_date or now, so a task escalated after
+        # its original deadline had already passed still gets a full 5
+        # days, not a few leftover hours. due_date may round-trip
+        # timezone-naive depending on the DB driver (ttl_sweep.py avoids
+        # this by comparing in SQL, not Python -- this comparison can't
+        # avoid it, so normalize explicitly instead of risking a naive/
+        # aware TypeError).
+        existing_due = task.due_date
+        if existing_due is not None and existing_due.tzinfo is None:
+            existing_due = existing_due.replace(tzinfo=timezone.utc)
+        base = existing_due if (existing_due and existing_due > now) else now
+        updates["due_date"] = base + timedelta(days=5)
     elif action == "reject":
         updates["status"] = "rejected"
         updates["completed_at"] = now

@@ -17,6 +17,7 @@ Run directly:
 Exits 0 if every check passes, non-zero (with a printed reason) otherwise.
 """
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -29,6 +30,15 @@ from backend.models import Base, Task
 from backend.task_actions import apply_task_action, TaskConflictError
 
 failures = []
+
+
+def _aware(dt):
+    """SQLite strips tzinfo on round-trip (confirmed empirically running
+    this file) -- same normalization apply_task_action() itself already
+    does defensively before comparing due_date in production code."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def check(name: str, condition: bool, detail: str = ""):
@@ -107,6 +117,66 @@ def test_escalate_does_not_publish():
           f"called {mock_publish.call_count} times")
 
 
+def test_escalate_extends_due_date_5_days_from_now_when_overdue():
+    """The common escalation case -- a task past (or with no) due_date
+    gets a full, real 5 days, not a few leftover hours."""
+    db = _make_session()
+    past_due = datetime.now(timezone.utc) - timedelta(days=2)
+    task = Task(title="Review ALT-2001", status="pending",
+                reply_to="hil.replies.x", correlation_id="corr-esc-1",
+                due_date=past_due)
+    db.add(task)
+    db.commit()
+
+    before = datetime.now(timezone.utc)
+    apply_task_action(db, task, "escalate", "reviewer@bank.example")
+    after = datetime.now(timezone.utc)
+
+    db.refresh(task)
+    due = _aware(task.due_date)
+    check("due_date extended to ~now+5 days, not past_due+5 days",
+          before + timedelta(days=5) <= due <= after + timedelta(days=5),
+          f"due_date={due}")
+
+
+def test_escalate_extends_from_existing_due_date_when_still_future():
+    """A task escalated well before its original deadline gets 5 more
+    days added to that deadline, not reset back down to now+5."""
+    db = _make_session()
+    future_due = datetime.now(timezone.utc) + timedelta(days=10)
+    task = Task(title="Review ALT-2002", status="pending",
+                reply_to="hil.replies.x", correlation_id="corr-esc-2",
+                due_date=future_due)
+    db.add(task)
+    db.commit()
+
+    apply_task_action(db, task, "escalate", "reviewer@bank.example")
+
+    db.refresh(task)
+    due = _aware(task.due_date)
+    expected = future_due + timedelta(days=5)
+    check("due_date extended from the existing future due_date",
+          abs((due - expected).total_seconds()) < 5,
+          f"due_date={due}, expected~={expected}")
+
+
+def test_escalate_handles_timezone_naive_due_date_without_raising():
+    """due_date may round-trip timezone-naive depending on the DB driver
+    -- must not raise a naive/aware TypeError."""
+    db = _make_session()
+    naive_future = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3)
+    task = Task(title="Review ALT-2003", status="pending", due_date=naive_future)
+    db.add(task)
+    db.commit()
+
+    raised = False
+    try:
+        apply_task_action(db, task, "escalate", "reviewer@bank.example")
+    except TypeError:
+        raised = True
+    check("no naive/aware TypeError on a naive due_date", not raised)
+
+
 def test_missing_reply_to_does_not_raise():
     """A task with no reply_to/correlation_id (not created from the
     Kafka-driven HIL flow) must not break the status transition itself --
@@ -161,6 +231,9 @@ def main() -> int:
         test_complete_publishes_to_reply_to,
         test_claim_does_not_publish,
         test_escalate_does_not_publish,
+        test_escalate_extends_due_date_5_days_from_now_when_overdue,
+        test_escalate_extends_from_existing_due_date_when_still_future,
+        test_escalate_handles_timezone_naive_due_date_without_raising,
         test_missing_reply_to_does_not_raise,
         test_conflict_still_raises_and_never_publishes,
     ):
