@@ -714,7 +714,13 @@ function taskDetailHtml(t) {
   const isManager = currentUser && currentUser.role === "manager";
   const canClaim = currentUser && !t.assigned_to && ["pending"].includes(t.status);
   const isActive = ["pending","in_progress"].includes(t.status);
-  const canAct   = isActive && (isMyTask || isAdmin || isManager);
+  const isEscalated = t.status === "escalated";
+  // Escalated tasks were handed up for someone with more authority to
+  // decide -- only a manager or admin can, and they must be able to (before
+  // this, no one could: the buttons required pending/in_progress).
+  const canAct   = (isActive && (isMyTask || isAdmin || isManager))
+                || (isEscalated && (isAdmin || isManager));
+  const canEscalate = isActive && (isMyTask || isAdmin || isManager);
 
   let html = `
     <div class="modal-section">
@@ -828,6 +834,15 @@ function taskDetailHtml(t) {
     </div>`;
   }
 
+  // Why there are no buttons, when a task is still open but not yours to decide
+  if (!canClaim && !canAct && (isActive || isEscalated)) {
+    const who = t.assigned_to ? t.assigned_to.split("@")[0] : "";
+    const why = isEscalated
+      ? "Escalated — waiting for a manager or admin to decide."
+      : `Assigned to ${esc(who)} — only they, a manager or an admin can decide this task.`;
+    html += `<div class="modal-section"><div class="modal-action-note">${why}</div></div>`;
+  }
+
   // Actions
   if (canClaim || canAct) {
     html += `<div class="modal-section">
@@ -841,9 +856,12 @@ function taskDetailHtml(t) {
     if (canAct) {
       html += `<button class="btn btn-green btn-sm" onclick="taskAction(${t.id},'complete')">Approve</button>`;
       html += `<button class="btn btn-red btn-sm" onclick="taskAction(${t.id},'reject')">Reject</button>`;
-      html += `<button class="btn btn-amber btn-sm" onclick="taskAction(${t.id},'escalate')">Escalate</button>`;
+      if (canEscalate) {
+        html += `<button class="btn btn-amber btn-sm" onclick="taskAction(${t.id},'escalate')">Escalate</button>`;
+      }
     }
     html += `</div>`;
+    html += `<div class="modal-action-error" id="action-error" role="alert"></div>`;
   }
 
   return html;
@@ -851,15 +869,40 @@ function taskDetailHtml(t) {
 
 async function taskAction(taskId, action) {
   const comment = document.getElementById("action-comment")?.value || "";
+  const errEl = document.getElementById("action-error");
+  const buttons = document.querySelectorAll(".modal-actions button");
+  const showError = (msg) => {
+    if (errEl) errEl.textContent = msg;
+    buttons.forEach(b => { b.disabled = false; });
+  };
+  if (errEl) errEl.textContent = "";
+  buttons.forEach(b => { b.disabled = true; });   // no double-submits
+
+  let r;
   try {
-    await authFetch(`/api/tasks/${taskId}/action`, {
+    r = await authFetch(`/api/tasks/${taskId}/action`, {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ action, actor: currentUser.email, comment: comment || null })
     });
-    closeTaskModal();
-    if (activeAppId) await loadTasksForApp(activeAppId);
-    else await loadAll();
-  } catch(e) { console.error(e); }
+  } catch (e) {
+    console.error(e);
+    return showError("Couldn't reach the server — the action was not recorded. Try again.");
+  }
+  // authFetch only throws on 401; a 400/404/409 used to be treated as
+  // success here, so a failed click just closed the dialog silently.
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).detail || ""; } catch (_) {}
+    if (r.status === 409) return showError("Someone else already decided this task. Close and reopen it to see the current state.");
+    return showError(detail ? `Not recorded: ${detail}` : `Not recorded (HTTP ${r.status}).`);
+  }
+
+  if (activeAppId) await loadTasksForApp(activeAppId);
+  else await loadAll();
+  // Claiming makes the task yours -- reopen it so Approve/Reject are right
+  // there, instead of closing the dialog and making the user find it again.
+  if (action === "claim" || action === "start") await openTask(taskId);
+  else closeTaskModal();
 }
 
 function closeTaskModal() { document.getElementById("task-modal").style.display = "none"; }
@@ -1276,7 +1319,24 @@ function initTheme() {
     try {
       currentUser = JSON.parse(saved);
       authToken = savedToken;
-      showApp();
-    } catch { logout(); }
+    } catch { logout(); return; }
+    // The cached login response can be stale (e.g. the user's role changed
+    // since they signed in) -- refresh it before showing the app. If the
+    // refresh fails for any reason other than an expired session, fall back
+    // to the cached copy rather than blocking the UI.
+    fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + authToken } })
+      .then(r => {
+        if (r.status === 401) { logout(); return null; }
+        return r.ok ? r.json() : undefined;
+      })
+      .then(me => {
+        if (me === null) return;              // session expired -> login shown
+        if (me) {
+          currentUser = Object.assign({}, currentUser, me);
+          localStorage.setItem("k9x_hil_user", JSON.stringify(currentUser));
+        }
+        showApp();
+      })
+      .catch(() => showApp());
   }
 })();

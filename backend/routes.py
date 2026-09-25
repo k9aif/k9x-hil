@@ -33,6 +33,18 @@ def login(req: LoginReq, db: Session = Depends(get_db)):
             "department": user.department, "team": user.team, "applications": apps}
 
 
+@router.get("/auth/me")
+def auth_me(user: User = Depends(get_current_user)):
+    """The signed-in user as the database has them now -- same fields as the
+    login response, minus the token. The web UI caches the login response in
+    localStorage; it refreshes from here on load so a role change (e.g. demo
+    worker -> manager) takes effect without logging out and back in."""
+    apps = [{"id": a.id, "name": a.name, "project": a.project.name, "project_id": a.project_id}
+            for a in user.applications]
+    return {"name": user.name, "email": user.email, "role": user.role,
+            "department": user.department, "team": user.team, "applications": apps}
+
+
 # ── Projects ─────────────────────────────────────────────────────────────────
 
 @router.get("/projects")

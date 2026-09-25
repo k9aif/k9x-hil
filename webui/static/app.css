@@ -579,3 +579,12 @@ body.dark .task-card-expired { background: #ef444412; }
 body.dark .tt-row-unassigned { background: #ef444410; }
 .tt-row-expired { background: #ef444410; }
 body.dark .tt-row-expired { background: #ef444418; }
+
+/* Task dialog: why there are no action buttons, and action errors */
+.modal-action-note {
+  font-size: 12px; line-height: 1.5; color: var(--amber);
+  padding: 8px 10px; border: 1px solid #f59e0b44; border-radius: 6px; background: #f59e0b11;
+}
+.modal-action-error { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 0; }
+.modal-action-error:empty { display: none; }
+.modal-actions button:disabled { opacity: 0.55; cursor: wait; }

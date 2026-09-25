@@ -14,6 +14,13 @@ from backend.hil_reply import attempt_publish, enqueue_hil_reply
 from backend.models import Task, TaskAction
 
 _TERMINAL_DECISION_ACTIONS = {"complete", "reject", "expire"}
+
+# Statuses a task never leaves once reached. An action on a task in one of
+# these is refused: before this guard, "complete" on an already-completed
+# task succeeded (the compare-and-swap below only catches a *concurrent*
+# change, not a stale re-decision) and queued a second reply to the waiting
+# workflow.
+_FINAL_STATUSES = {"completed", "rejected", "expired"}
 # "claim"/"start" aren't decisions -- someone picked the task up, nothing
 # for a waiting orchestrator to resume on yet. "escalate" isn't terminal
 # either -- the task stays in-flight for someone else to act on; *that*
@@ -48,6 +55,10 @@ def apply_task_action(db, task: Task, action: str, actor: str,
     specific Task row has already been found.
     """
     expected_status = task.status
+    if expected_status in _FINAL_STATUSES:
+        raise ValueError(
+            f"Task {task.id} is already {expected_status}; no further actions are accepted"
+        )
     now = datetime.now(timezone.utc)
     # Captured before the write, not read back off `task` after commit --
     # avoids relying on SQLAlchemy's post-commit object-expiry behavior

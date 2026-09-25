@@ -228,6 +228,44 @@ def test_conflict_still_raises_and_never_publishes():
           mock_enqueue.call_count == 0, f"called {mock_enqueue.call_count} times")
 
 
+def test_decided_task_refuses_further_actions():
+    """A completed/rejected/expired task is final: a stale second decision
+    must be refused, not recorded and re-published to the workflow."""
+    for final in ("completed", "rejected", "expired"):
+        db = _make_session()
+        task = Task(title=f"Already {final}", status=final,
+                    reply_to="hil.replies.x", correlation_id=f"corr-{final}")
+        db.add(task)
+        db.commit()
+        with patch("backend.task_actions.enqueue_hil_reply") as mock_enqueue:
+            try:
+                apply_task_action(db, task, "complete", "late.reviewer@bank.example")
+                refused = False
+            except ValueError:
+                refused = True
+        db.refresh(task)
+        check(f"{final} task refuses complete", refused)
+        check(f"{final} task status unchanged", task.status == final, task.status)
+        check(f"{final} task publishes nothing", mock_enqueue.call_count == 0,
+              f"called {mock_enqueue.call_count} times")
+
+
+def test_escalated_task_can_still_be_decided():
+    """Escalation hands the task to someone with more authority -- that
+    person must be able to decide it."""
+    db = _make_session()
+    task = Task(title="Escalated", status="escalated",
+                reply_to="hil.replies.x", correlation_id="corr-esc")
+    db.add(task)
+    db.commit()
+    with patch("backend.task_actions.enqueue_hil_reply") as mock_enqueue, \
+         patch("backend.task_actions.attempt_publish"):
+        status = apply_task_action(db, task, "reject", "manager@bank.example")
+    check("escalated -> rejected", status == "rejected", status)
+    check("decision publishes one reply", mock_enqueue.call_count == 1,
+          f"called {mock_enqueue.call_count} times")
+
+
 def main() -> int:
     for fn in (
         test_complete_publishes_to_reply_to,
@@ -238,6 +276,8 @@ def main() -> int:
         test_escalate_handles_timezone_naive_due_date_without_raising,
         test_missing_reply_to_does_not_raise,
         test_conflict_still_raises_and_never_publishes,
+        test_decided_task_refuses_further_actions,
+        test_escalated_task_can_still_be_decided,
     ):
         print(f"{fn.__name__}:")
         fn()

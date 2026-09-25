@@ -21,9 +21,11 @@ def seed():
         for u in users:
             if not db.query(User).filter(User.email == u["email"]).first():
                 db.add(User(**u, password_hash=hashlib.sha256(b"changeme").hexdigest()))
-        # Demo user
+        # Demo user -- a manager, so a reviewer trying the demo can decide any
+        # open task (including escalated ones), not only the few assigned to
+        # them. As a worker it could act on almost nothing in the seeded data.
         if not db.query(User).filter(User.email == "demo@k9x.ai").first():
-            db.add(User(name="Demo User", email="demo@k9x.ai", role="worker",
+            db.add(User(name="Demo User", email="demo@k9x.ai", role="manager",
                         department="Demo", team="Demo",
                         password_hash=hashlib.sha256(b"demo").hexdigest()))
         # Admin user
