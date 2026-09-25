@@ -1,5 +1,6 @@
 import os
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from dotenv import load_dotenv
 
@@ -12,7 +13,24 @@ _USER   = os.getenv("POSTGRES_USER", "postgres")
 _PASS   = os.getenv("POSTGRES_PASSWORD", "")
 SCHEMA  = os.getenv("POSTGRES_SCHEMA", "k9hil")
 
-DATABASE_URL = f"postgresql://{_USER}:{_PASS}@{_HOST}:{_PORT}/{_DB}"
+# Name the driver explicitly. A bare "postgresql://" URL means psycopg2 on
+# SQLAlchemy 2.0 but psycopg (v3) on 2.1+ -- and requirements.txt's
+# `sqlalchemy>=2.0` resolves 2.1 on a fresh build, while this app installs
+# psycopg2-binary. Result: ModuleNotFoundError: psycopg at import, and the
+# container crash-loops (same bug as k9-aif G-20). POSTGRES_DRIVER=psycopg
+# switches to v3 for anyone who installs it instead.
+_DRIVER = os.getenv("POSTGRES_DRIVER", "psycopg2")
+
+# URL.create escapes the password, so characters like @ / : # in it can't
+# break the URL the way string formatting could.
+DATABASE_URL = URL.create(
+    drivername=f"postgresql+{_DRIVER}",
+    username=_USER,
+    password=_PASS or None,
+    host=_HOST,
+    port=int(_PORT),
+    database=_DB,
+)
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
