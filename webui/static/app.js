@@ -328,7 +328,10 @@ function renderDashboard() {
       const left = taskTimeLeft(t);
       return left !== null && left > 0 && left <= 86400000;
     }).length;
-    return { name: q.name, app: q.application, topic: q.topic, active, ending24h, appId: q.application_id, queueId: q.id };
+    // High/critical tasks still waiting: lights the red bulb on the application row.
+    const urgent = qTasks.filter(t => ["pending","in_progress"].includes(t.status)
+                                      && ["high","critical"].includes(String(t.priority || "").toLowerCase())).length;
+    return { name: q.name, app: q.application, topic: q.topic, active, ending24h, urgent, appId: q.application_id, queueId: q.id };
   });
 
   const appGroups = new Map(); // appId -> { app, rows: [] }
@@ -342,8 +345,11 @@ function renderDashboard() {
     const rows = [...group.rows].sort((a, b) => a.name.localeCompare(b.name));
     const subActive = rows.reduce((s, r) => s + r.active, 0);
     const subEnding = rows.reduce((s, r) => s + r.ending24h, 0);
+    const subUrgent = rows.reduce((s, r) => s + r.urgent, 0);
+    const bulb = subUrgent > 0
+      ? `<span class="dash-alert" title="${subUrgent} high/critical task${subUrgent > 1 ? "s" : ""} waiting"></span>` : "";
     const subtotalRow = `<tr class="dash-app-subtotal" onclick="filterByApplication(${appId},'${esc(group.app)}')">
-      <td class="dash-app-name" colspan="2">${esc(group.app)}</td>
+      <td class="dash-app-name" colspan="2">${esc(group.app)}${bulb}</td>
       <td class="dash-qt-count">${subActive}</td>
       <td class="dash-qt-urgent${subEnding > 0 ? ' dash-qt-red' : ''}">${subEnding > 0 ? subEnding : '—'}</td>
     </tr>`;
