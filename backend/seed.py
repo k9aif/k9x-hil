@@ -287,5 +287,31 @@ def seed():
         if admin and ap_app not in admin.applications:
             admin.applications.append(ap_app)
         db.commit()
+
+        # ── K9 Platform / Framework Security (K9X Sentinel) ────────────
+        # K9X Sentinel (k9aif/k9x-sentinel) raises a case here when a newly
+        # published threat is a gap or partial gap in the framework's security
+        # capabilities, or a dependency floor allows a vulnerable version.
+        # Registration only, no example tasks. Deliberately NOT assigned to
+        # demo: these cases describe weaknesses that may not be fixed yet.
+        # (Assignment only affects the sidebar; /tasks is not filtered by
+        # membership yet — see the Sentinel README's k9x-hil note.)
+        if not db.query(Application).filter(Application.name == "Framework Security",
+                                            Application.project_id == k9_proj.id).first():
+            db.add(Application(project_id=k9_proj.id, name="Framework Security",
+                               description="K9X Sentinel — new threats compared with K9-AIF's security capability catalog"))
+        db.commit()
+        sec_app = db.query(Application).filter(Application.name == "Framework Security",
+                                               Application.project_id == k9_proj.id).first()
+        if not db.query(Queue).filter(Queue.topic == "hil.requests.framework_security_updates").first():
+            db.add(Queue(application_id=sec_app.id, name="Framework Security Updates",
+                         description="A threat K9-AIF does not fully cover, or a vulnerable dependency floor. "
+                                     "Approve to open a private draft advisory / issue on k9-aif-framework.",
+                         topic="hil.requests.framework_security_updates",
+                         ttl_hours=336, ttl_action="expire"))
+        for user in (ravi, admin):
+            if user and sec_app not in user.applications:
+                user.applications.append(sec_app)
+        db.commit()
     finally:
         db.close()
