@@ -288,7 +288,7 @@ def seed():
             admin.applications.append(ap_app)
         db.commit()
 
-        # ── K9 Platform / Framework Security (K9X Sentinel) ────────────
+        # ── K9 Platform / K9X Sentinel ─────────────────────────────────
         # K9X Sentinel (k9aif/k9x-sentinel) raises a case here when a newly
         # published threat is a gap or partial gap in the framework's security
         # capabilities, or a dependency floor allows a vulnerable version.
@@ -296,15 +296,15 @@ def seed():
         # demo: these cases describe weaknesses that may not be fixed yet.
         # (Assignment only affects the sidebar; /tasks is not filtered by
         # membership yet — see the Sentinel README's k9x-hil note.)
-        if not db.query(Application).filter(Application.name == "Framework Security",
+        if not db.query(Application).filter(Application.name == "K9X Sentinel",
                                             Application.project_id == k9_proj.id).first():
-            db.add(Application(project_id=k9_proj.id, name="Framework Security",
-                               description="K9X Sentinel — new threats compared with K9-AIF's security capability catalog"))
+            db.add(Application(project_id=k9_proj.id, name="K9X Sentinel",
+                               description="Daily threat watch: new attacks compared with K9-AIF's security capability catalog (sentinel.k9x.ai)"))
         db.commit()
-        sec_app = db.query(Application).filter(Application.name == "Framework Security",
+        sec_app = db.query(Application).filter(Application.name == "K9X Sentinel",
                                                Application.project_id == k9_proj.id).first()
         if not db.query(Queue).filter(Queue.topic == "hil.requests.framework_security_updates").first():
-            db.add(Queue(application_id=sec_app.id, name="Framework Security Updates",
+            db.add(Queue(application_id=sec_app.id, name="Security tasks",
                          description="A threat K9-AIF does not fully cover, or a vulnerable dependency floor. "
                                      "Approve to open a private draft advisory / issue on k9-aif-framework.",
                          topic="hil.requests.framework_security_updates",
