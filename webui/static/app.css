@@ -1,3 +1,6 @@
+/* The hidden attribute must win over component display rules (.internal-badge etc.) */
+[hidden] { display: none !important; }
+
 /* ── k9x HIL — Case Management CSS ────────────────────────────────────────── */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
