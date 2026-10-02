@@ -10,6 +10,8 @@ from backend.profile import PROFILE
 
 log = logging.getLogger("k9x-hil.seed")
 
+DAS_PROJECT = "DAS (Defense Acquisition System)"
+
 # public (hil.k9x.ai): demo projects/queues, demo/admin logins on the sign-in
 #   page, read-only (backend/profile.py). internal (LAN): one admin whose
 #   password comes from HIL_ADMIN_PASSWORD, the real queues (K9X Sentinel's
@@ -61,13 +63,18 @@ def seed_catalog(samples: bool):
             db.add(Project(name="Demo", description="Demonstration project — insurance document processing pipeline"))
         if not db.query(Project).filter(Project.name == "K9 Platform").first():
             db.add(Project(name="K9 Platform", description="K9-AIF framework and ecosystem platform services"))
-        if not db.query(Project).filter(Project.name == "DAS").first():
-            db.add(Project(name="DAS", description="Defense Acquisition System — DoDAF/JCIDS/Acquisition/SE reference pipeline"))
+        # Shown as "DAS (Defense Acquisition System)"; renamed in place from the
+        # earlier short name "DAS", so existing apps, queues and tasks stay attached.
+        old_das = db.query(Project).filter(Project.name == "DAS").first()
+        if old_das:
+            old_das.name = DAS_PROJECT
+        elif not db.query(Project).filter(Project.name == DAS_PROJECT).first():
+            db.add(Project(name=DAS_PROJECT, description="Defense Acquisition System — DoDAF/JCIDS/Acquisition/SE reference pipeline"))
         db.commit()
 
         demo_proj = db.query(Project).filter(Project.name == "Demo").first()
         k9_proj   = db.query(Project).filter(Project.name == "K9 Platform").first()
-        das_proj  = db.query(Project).filter(Project.name == "DAS").first()
+        das_proj  = db.query(Project).filter(Project.name == DAS_PROJECT).first()
 
         # ── Applications ─────────────────────────────────────────────
         apps_data = [
