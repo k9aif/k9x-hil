@@ -31,9 +31,18 @@ case "$cmd" in
 
   start)
     [ -f "$ENV_FILE" ] || { echo "Missing $ENV_FILE (copy .env.internal.example and fill it in)"; exit 1; }
-    for key in HIL_PROFILE=internal POSTGRES_SCHEMA= HIL_CONSUMER_GROUP= JWT_SECRET_KEY= HIL_ADMIN_PASSWORD=; do
-      grep -q "^${key}" "$ENV_FILE" || { echo "$ENV_FILE must set ${key}..."; exit 1; }
+    # Each key exactly once and non-empty (podman uses the last duplicate,
+    # so a blank line added after the copied one silently wins).
+    for key in HIL_PROFILE POSTGRES_SCHEMA HIL_CONSUMER_GROUP JWT_SECRET_KEY HIL_ADMIN_PASSWORD; do
+      n=$(grep -c "^${key}=" "$ENV_FILE" || true)
+      [ "$n" = 1 ] || { echo "$ENV_FILE has ${key} ${n} times; keep exactly one line."; exit 1; }
+      grep -qE "^${key}=.+" "$ENV_FILE" || { echo "$ENV_FILE: ${key} is empty."; exit 1; }
     done
+    grep -qE '^HIL_PROFILE=internal$' "$ENV_FILE" || { echo "$ENV_FILE must set HIL_PROFILE=internal"; exit 1; }
+    pub_jwt=$(grep -E '^JWT_SECRET_KEY=' "$PROJECT_DIR/.env" 2>/dev/null | tail -1 || true)
+    if [ -n "$pub_jwt" ] && [ "$pub_jwt" = "$(grep -E '^JWT_SECRET_KEY=' "$ENV_FILE")" ]; then
+      echo "$ENV_FILE reuses the public JWT_SECRET_KEY; generate a new one (openssl rand -hex 32)."; exit 1
+    fi
     if grep -qE '^POSTGRES_SCHEMA=k9hil$' "$ENV_FILE" || grep -qE '^HIL_CONSUMER_GROUP=k9x-hil-ingest$' "$ENV_FILE"; then
       echo "$ENV_FILE shares the public instance's schema or consumer group; use its own."; exit 1
     fi
