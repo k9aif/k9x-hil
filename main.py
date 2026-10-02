@@ -71,8 +71,9 @@ def health():
 
 @app.get("/api/meta")
 def meta():
-    """Public: which instance this is (demo logins only on the public sign-in page)."""
-    return {"profile": PROFILE}
+    """Public: which instance this is (demo logins only on the public sign-in page) and its
+    optional HIL_BADGE text, shown next to the logo (e.g. "Internal")."""
+    return {"profile": PROFILE, "badge": os.getenv("HIL_BADGE", "").strip()[:40]}
 
 
 @app.get("/{full_path:path}")
