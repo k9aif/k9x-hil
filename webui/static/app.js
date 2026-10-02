@@ -718,15 +718,16 @@ function taskDetailHtml(t) {
   const isMyTask = currentUser && t.assigned_to === currentUser.email;
   const isAdmin  = currentUser && currentUser.role === "admin";
   const isManager = currentUser && currentUser.role === "manager";
-  const canClaim = currentUser && !t.assigned_to && ["pending"].includes(t.status);
+  // Public instance: nobody acts (the server refuses too, see /api/meta).
+  const canClaim = !HIL_READ_ONLY && currentUser && !t.assigned_to && ["pending"].includes(t.status);
   const isActive = ["pending","in_progress"].includes(t.status);
   const isEscalated = t.status === "escalated";
   // Escalated tasks were handed up for someone with more authority to
   // decide -- only a manager or admin can, and they must be able to (before
   // this, no one could: the buttons required pending/in_progress).
-  const canAct   = (isActive && (isMyTask || isAdmin || isManager))
-                || (isEscalated && (isAdmin || isManager));
-  const canEscalate = isActive && (isMyTask || isAdmin || isManager);
+  const canAct   = !HIL_READ_ONLY && ((isActive && (isMyTask || isAdmin || isManager))
+                || (isEscalated && (isAdmin || isManager)));
+  const canEscalate = canAct && isActive;
 
   let html = `
     <div class="modal-section">
@@ -841,7 +842,9 @@ function taskDetailHtml(t) {
   }
 
   // Why there are no buttons, when a task is still open but not yours to decide
-  if (!canClaim && !canAct && (isActive || isEscalated)) {
+  if (HIL_READ_ONLY && (isActive || isEscalated)) {
+    html += `<div class="modal-section"><div class="modal-action-note">Public demo: read-only. You can view this task, but no one (admin included) can claim, approve, reject or escalate it here.</div></div>`;
+  } else if (!canClaim && !canAct && (isActive || isEscalated)) {
     const who = t.assigned_to ? t.assigned_to.split("@")[0] : "";
     const why = isEscalated
       ? "Escalated — waiting for a manager or admin to decide."
@@ -939,6 +942,14 @@ function formatDate(iso) {
 
 // ── Administration panels ───────────────────────────────────────────────────
 
+let HIL_PROFILE = "public", HIL_READ_ONLY = true;
+fetch("/api/meta").then(r => r.json()).then(m => {
+  HIL_PROFILE = m.profile || "public";
+  HIL_READ_ONLY = m.read_only !== false;
+  const tryIt = document.getElementById("try-it");
+  if (tryIt) tryIt.hidden = HIL_PROFILE !== "public";   // demo logins only on the public site
+}).catch(() => {});
+
 function renderAdminLanding() {
   const cards = [
     { id: "admin-iam",      icon: "⊛", title: "Users & Roles",           desc: "Create users, assign roles, manage HILs, Managers, and Admins across projects." },
@@ -948,7 +959,9 @@ function renderAdminLanding() {
     { id: "admin-queues",   icon: "◫", title: "Queues & Topics",        desc: "Kafka topic mappings, queue configuration, SLA targets per queue." },
     { id: "admin-audit",    icon: "▤", title: "Audit Log",              desc: "Full chain of custody — who did what, when. Export for compliance." },
   ];
-  document.getElementById("admin-landing").innerHTML = `
+  const note = HIL_PROFILE === "public"
+    ? `<div class="admin-readonly-note">Public demo: everything is read-only, for every login including admin. You can view users and tasks; no one can change, approve or reject anything here.</div>` : "";
+  document.getElementById("admin-landing").innerHTML = `${note}
     <div class="admin-card-grid">
       ${cards.map(c => `<div class="admin-console-card" onclick="switchTab('${c.id}')">
         <div class="admin-console-icon">${c.icon}</div>

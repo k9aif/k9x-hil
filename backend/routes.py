@@ -10,6 +10,7 @@ from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction
 from backend.auth import create_access_token, get_current_user, require_admin
 from backend.task_actions import apply_task_action, TaskConflictError
+from backend.profile import READ_ONLY
 
 router = APIRouter(prefix="/api")
 
@@ -176,6 +177,11 @@ class TaskActionReq(BaseModel):
 @router.post("/tasks/{task_id}/action")
 def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_db),
                     _: User = Depends(get_current_user)):
+    if READ_ONLY:
+        # Public instance: view only, for every role. Decisions happen on the
+        # internal HIL; a decision here would publish a reply and resume the
+        # waiting application.
+        raise HTTPException(403, "This is the public, read-only K9X HIL. Tasks are decided on the internal instance.")
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")

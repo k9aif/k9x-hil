@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from backend.database import SessionLocal
 from backend.models import Queue, Task, TaskAction
+from backend.profile import READ_ONLY
 
 log = logging.getLogger("k9x-hil.kafka_consumer")
 
@@ -39,6 +40,10 @@ async def _publish_to_dlq(topic: str, raw_value: bytes, reason: str) -> None:
     non-JSON payloads survive intact) plus enough metadata to diagnose
     why it was dead-lettered without needing the original producer."""
     dlq_topic = f"{topic}.dlq"
+    if READ_ONLY:
+        # Public instance publishes nothing; the internal one dead-letters it.
+        log.warning("[kafka_consumer] read-only: skipped malformed message from topic=%s (reason=%s)", topic, reason)
+        return
     envelope = {
         "original_topic": topic,
         "reason": reason,
@@ -162,7 +167,9 @@ async def run_consumer() -> None:
         consumer = AIOKafkaConsumer(
             *topics,
             bootstrap_servers=[broker],
-            group_id="k9x-hil-ingest",
+            # One group per instance (HIL_CONSUMER_GROUP): two HILs sharing a
+            # group would split topics between them unpredictably.
+            group_id=os.getenv("HIL_CONSUMER_GROUP", "k9x-hil-ingest"),
             # "earliest", not "latest" -- a restart-timing gap where a
             # message publishes while this consumer is reconnecting
             # previously meant that message was gone forever ("latest" only

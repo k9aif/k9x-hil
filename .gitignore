@@ -5,3 +5,5 @@ __pycache__/
 *.db
 .venv/
 node_modules/
+.env.internal
+.env.*.bak*

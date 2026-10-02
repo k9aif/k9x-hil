@@ -2,38 +2,59 @@ from datetime import datetime, timezone, timedelta
 from backend.database import SessionLocal
 from backend.models import User, Project, Application, Queue, Task, TaskAction
 import hashlib
+import logging
+import os
+import secrets
+
+from backend.profile import PROFILE
+
+log = logging.getLogger("k9x-hil.seed")
+
+# public (hil.k9x.ai): demo projects/queues, demo/admin logins on the sign-in
+#   page, read-only (backend/profile.py). internal (LAN): one admin whose
+#   password comes from HIL_ADMIN_PASSWORD, the real queues (K9X Sentinel's
+#   Security tasks), no demo data, no credentials shown.
 
 
 def seed():
+    if PROFILE == "internal":
+        return seed_internal()
+    return seed_catalog(samples=True)
+
+
+def seed_catalog(samples: bool):
+    """Projects, applications and queues (the topics this instance consumes).
+    samples=True adds the public demo's logins, sample people and example tasks."""
     db = SessionLocal()
     try:
-        # ── Users ────────────────────────────────────────────────────
-        users = [
-            dict(name="Ravi Natarajan", email="ravinatarajan@k9x.ai", role="admin",
-                 department="Platform Engineering", team="k9x"),
-            dict(name="Sarah Chen", email="sarah.chen@k9x.ai", role="manager",
-                 department="Claims Processing", team="Insurance Ops"),
-            dict(name="James Park", email="james.park@k9x.ai", role="worker",
-                 department="Claims Processing", team="Insurance Ops"),
-            dict(name="Maria Silva", email="maria.silva@k9x.ai", role="worker",
-                 department="Architecture", team="Enterprise Architecture"),
-        ]
-        for u in users:
-            if not db.query(User).filter(User.email == u["email"]).first():
-                db.add(User(**u, password_hash=hashlib.sha256(b"changeme").hexdigest()))
-        # Demo user -- a manager, so a reviewer trying the demo can decide any
-        # open task (including escalated ones), not only the few assigned to
-        # them. As a worker it could act on almost nothing in the seeded data.
-        if not db.query(User).filter(User.email == "demo@k9x.ai").first():
-            db.add(User(name="Demo User", email="demo@k9x.ai", role="manager",
-                        department="Demo", team="Demo",
-                        password_hash=hashlib.sha256(b"demo").hexdigest()))
-        # Admin user
-        if not db.query(User).filter(User.email == "admin@k9x.ai").first():
-            db.add(User(name="Admin", email="admin@k9x.ai", role="admin",
-                        department="Platform Engineering", team="k9x",
-                        password_hash=hashlib.sha256(b"admin123").hexdigest()))
-        db.commit()
+        if samples:  # demo logins + sample people (public only)
+            # ── Users ────────────────────────────────────────────────────
+            # Sample people tasks are assigned to. They can't sign in (random
+            # password): on the public site only the demo/admin logins are usable.
+            users = [
+                dict(name="Sarah Chen", email="sarah.chen@k9x.ai", role="manager",
+                     department="Claims Processing", team="Insurance Ops"),
+                dict(name="James Park", email="james.park@k9x.ai", role="worker",
+                     department="Claims Processing", team="Insurance Ops"),
+                dict(name="Maria Silva", email="maria.silva@k9x.ai", role="worker",
+                     department="Architecture", team="Enterprise Architecture"),
+            ]
+            for u in users:
+                if not db.query(User).filter(User.email == u["email"]).first():
+                    db.add(User(**u, password_hash=hashlib.sha256(secrets.token_bytes(32)).hexdigest()))
+            # Demo user -- a manager, so a reviewer trying the demo can decide any
+            # open task (including escalated ones), not only the few assigned to
+            # them. As a worker it could act on almost nothing in the seeded data.
+            if not db.query(User).filter(User.email == "demo@k9x.ai").first():
+                db.add(User(name="Demo User", email="demo@k9x.ai", role="manager",
+                            department="Demo", team="Demo",
+                            password_hash=hashlib.sha256(b"demo").hexdigest()))
+            # Admin user
+            if not db.query(User).filter(User.email == "admin@k9x.ai").first():
+                db.add(User(name="Admin", email="admin@k9x.ai", role="admin",
+                            department="Platform Engineering", team="k9x",
+                            password_hash=hashlib.sha256(b"admin123").hexdigest()))
+            db.commit()
 
         # ── Projects ────────────────────────────────────────────────
         if not db.query(Project).filter(Project.name == "Demo").first():
@@ -137,95 +158,96 @@ def seed():
         sbb_q       = db.query(Queue).filter(Queue.topic == "workflow.hil.k9platform.architecture.sbb-promotion").first()
         compliance_q = db.query(Queue).filter(Queue.topic == "workflow.hil.k9platform.architecture.compliance").first()
 
-        # ── Example tasks ────────────────────────────────────────────
-        now = datetime.now(timezone.utc)
-        tasks = [
-            dict(queue_id=flagged_q.id,
-                 title="Review flagged claim — Policy #EOC-2024-8847",
-                 description="Agent confidence below threshold (0.62). Extracted coverage amount $450,000 needs human verification against source document.",
-                 source_orchestrator="EOCOrchestrator", source_topic="workflow.hil.eoc.claims.flagged",
-                 reply_to="workflow.eoc.hil.response",
-                 correlation_id="exec-a1b2c3d4", status="pending", priority="high",
-                 assigned_to="james.park@k9x.ai",
-                 payload={"policy_id": "EOC-2024-8847", "confidence": 0.62, "extracted_amount": 450000, "agent": "EOCValidationAgent"},
-                 ttl_hours=168, ttl_action="reject",
-                 due_date=now + timedelta(hours=4)),
+        if samples:  # example tasks (public only)
+            # ── Example tasks ────────────────────────────────────────────
+            now = datetime.now(timezone.utc)
+            tasks = [
+                dict(queue_id=flagged_q.id,
+                     title="Review flagged claim — Policy #EOC-2024-8847",
+                     description="Agent confidence below threshold (0.62). Extracted coverage amount $450,000 needs human verification against source document.",
+                     source_orchestrator="EOCOrchestrator", source_topic="workflow.hil.eoc.claims.flagged",
+                     reply_to="workflow.eoc.hil.response",
+                     correlation_id="exec-a1b2c3d4", status="pending", priority="high",
+                     assigned_to="james.park@k9x.ai",
+                     payload={"policy_id": "EOC-2024-8847", "confidence": 0.62, "extracted_amount": 450000, "agent": "EOCValidationAgent"},
+                     ttl_hours=168, ttl_action="reject",
+                     due_date=now + timedelta(hours=4)),
 
-            dict(queue_id=ocr_q.id,
-                 title="Verify extracted beneficiary data — Document #DOC-9921",
-                 description="OCR extraction returned multiple possible beneficiary names. Human must confirm correct entry.",
-                 source_orchestrator="DocumentOrchestrator", source_topic="workflow.hil.eoc.documents.ocr-verify",
-                 reply_to="workflow.eoc.hil.response",
-                 correlation_id="exec-e5f6g7h8", status="in_progress", priority="medium",
-                 assigned_to="james.park@k9x.ai", pii=1, pii_fields=["payload.candidates"],
-                 payload={"document_id": "DOC-9921", "candidates": ["John A. Smith", "John A. Smyth"], "agent": "DocumentExtractorAgent"},
-                 artifacts=["s3://k9x-eoc-documents/DOC-9921/source.pdf"],
-                 jira_ticket="EOC-142 (placeholder -- no live Jira integration yet)",
-                 ttl_hours=48, ttl_action="reject"),
+                dict(queue_id=ocr_q.id,
+                     title="Verify extracted beneficiary data — Document #DOC-9921",
+                     description="OCR extraction returned multiple possible beneficiary names. Human must confirm correct entry.",
+                     source_orchestrator="DocumentOrchestrator", source_topic="workflow.hil.eoc.documents.ocr-verify",
+                     reply_to="workflow.eoc.hil.response",
+                     correlation_id="exec-e5f6g7h8", status="in_progress", priority="medium",
+                     assigned_to="james.park@k9x.ai", pii=1, pii_fields=["payload.candidates"],
+                     payload={"document_id": "DOC-9921", "candidates": ["John A. Smith", "John A. Smyth"], "agent": "DocumentExtractorAgent"},
+                     artifacts=["s3://k9x-eoc-documents/DOC-9921/source.pdf"],
+                     jira_ticket="EOC-142 (placeholder -- no live Jira integration yet)",
+                     ttl_hours=48, ttl_action="reject"),
 
-            dict(queue_id=sbb_q.id,
-                 title="Approve SBB promotion — ZeroTrust Orchestrator",
-                 description="ZeroTrustOrchestrator SBB proposed for promotion to Enterprise shared catalog. Architecture board review required.",
-                 source_orchestrator="ContinuumOrchestrator", source_topic="workflow.hil.k9platform.architecture.sbb-promotion",
-                 reply_to="workflow.k9platform.hil.response",
-                 correlation_id="exec-i9j0k1l2", status="pending", priority="medium",
-                 assigned_to="maria.silva@k9x.ai",
-                 payload={"sbb_name": "ZeroTrustOrchestrator", "current_tier": "Industry", "proposed_tier": "CommonSystems"},
-                 ttl_hours=336, ttl_action="expire"),
+                dict(queue_id=sbb_q.id,
+                     title="Approve SBB promotion — ZeroTrust Orchestrator",
+                     description="ZeroTrustOrchestrator SBB proposed for promotion to Enterprise shared catalog. Architecture board review required.",
+                     source_orchestrator="ContinuumOrchestrator", source_topic="workflow.hil.k9platform.architecture.sbb-promotion",
+                     reply_to="workflow.k9platform.hil.response",
+                     correlation_id="exec-i9j0k1l2", status="pending", priority="medium",
+                     assigned_to="maria.silva@k9x.ai",
+                     payload={"sbb_name": "ZeroTrustOrchestrator", "current_tier": "Industry", "proposed_tier": "CommonSystems"},
+                     ttl_hours=336, ttl_action="expire"),
 
-            dict(queue_id=compliance_q.id,
-                 title="Compliance sign-off — DoDAF Pipeline data handling",
-                 description="DoDAF Pipeline Squad processes defense architecture documents. Compliance team must approve data handling procedures before production deployment.",
-                 source_orchestrator="ComplianceOrchestrator", source_topic="workflow.hil.k9platform.architecture.compliance",
-                 reply_to="workflow.k9platform.hil.response",
-                 correlation_id="exec-m3n4o5p6", status="pending", priority="critical",
-                 assigned_to=None,
-                 payload={"project": "DoDAFPipeline", "classification": "CUI", "review_type": "data_handling"},
-                 ttl_hours=168, ttl_action="reject"),
+                dict(queue_id=compliance_q.id,
+                     title="Compliance sign-off — DoDAF Pipeline data handling",
+                     description="DoDAF Pipeline Squad processes defense architecture documents. Compliance team must approve data handling procedures before production deployment.",
+                     source_orchestrator="ComplianceOrchestrator", source_topic="workflow.hil.k9platform.architecture.compliance",
+                     reply_to="workflow.k9platform.hil.response",
+                     correlation_id="exec-m3n4o5p6", status="pending", priority="critical",
+                     assigned_to=None,
+                     payload={"project": "DoDAFPipeline", "classification": "CUI", "review_type": "data_handling"},
+                     ttl_hours=168, ttl_action="reject"),
 
-            dict(queue_id=flagged_q.id,
-                 title="Review low-confidence extraction — Policy #EOC-2024-9102",
-                 description="Validation loop reached max iterations without converging. Final confidence: 0.48. Human review required.",
-                 source_orchestrator="EOCOrchestrator", source_topic="workflow.hil.eoc.claims.flagged",
-                 reply_to="workflow.eoc.hil.response",
-                 correlation_id="exec-q7r8s9t0", status="completed", priority="high",
-                 assigned_to="sarah.chen@k9x.ai",
-                 payload={"policy_id": "EOC-2024-9102", "confidence": 0.48, "iterations": 5},
-                 result={"decision": "approved", "corrected_amount": 125000, "note": "Agent missed rider addendum on page 4"},
-                 completed_at=now - timedelta(hours=2)),
+                dict(queue_id=flagged_q.id,
+                     title="Review low-confidence extraction — Policy #EOC-2024-9102",
+                     description="Validation loop reached max iterations without converging. Final confidence: 0.48. Human review required.",
+                     source_orchestrator="EOCOrchestrator", source_topic="workflow.hil.eoc.claims.flagged",
+                     reply_to="workflow.eoc.hil.response",
+                     correlation_id="exec-q7r8s9t0", status="completed", priority="high",
+                     assigned_to="sarah.chen@k9x.ai",
+                     payload={"policy_id": "EOC-2024-9102", "confidence": 0.48, "iterations": 5},
+                     result={"decision": "approved", "corrected_amount": 125000, "note": "Agent missed rider addendum on page 4"},
+                     completed_at=now - timedelta(hours=2)),
 
-            dict(queue_id=escalated_q.id,
-                 title="Escalated claim — Policy #EOC-2024-7733",
-                 description="Worker escalated to manager — policy language is ambiguous regarding flood coverage in zone X.",
-                 source_orchestrator="EOCOrchestrator", source_topic="workflow.hil.eoc.claims.escalated",
-                 reply_to="workflow.eoc.hil.response",
-                 correlation_id="exec-u1v2w3x4", status="escalated", priority="high",
-                 assigned_to="sarah.chen@k9x.ai",
-                 payload={"policy_id": "EOC-2024-7733", "original_assignee": "james.park@k9x.ai", "reason": "Ambiguous flood coverage language"}),
-        ]
-        for t in tasks:
-            if not db.query(Task).filter(Task.correlation_id == t["correlation_id"]).first():
-                db.add(Task(**t))
-        db.commit()
+                dict(queue_id=escalated_q.id,
+                     title="Escalated claim — Policy #EOC-2024-7733",
+                     description="Worker escalated to manager — policy language is ambiguous regarding flood coverage in zone X.",
+                     source_orchestrator="EOCOrchestrator", source_topic="workflow.hil.eoc.claims.escalated",
+                     reply_to="workflow.eoc.hil.response",
+                     correlation_id="exec-u1v2w3x4", status="escalated", priority="high",
+                     assigned_to="sarah.chen@k9x.ai",
+                     payload={"policy_id": "EOC-2024-7733", "original_assignee": "james.park@k9x.ai", "reason": "Ambiguous flood coverage language"}),
+            ]
+            for t in tasks:
+                if not db.query(Task).filter(Task.correlation_id == t["correlation_id"]).first():
+                    db.add(Task(**t))
+            db.commit()
 
-        # ── Task actions ─────────────────────────────────────────────
-        completed = db.query(Task).filter(Task.correlation_id == "exec-q7r8s9t0").first()
-        if completed and not db.query(TaskAction).filter(TaskAction.task_id == completed.id).first():
-            db.add(TaskAction(task_id=completed.id, action="created", actor="system"))
-            db.add(TaskAction(task_id=completed.id, action="assigned", actor="system", comment="Auto-assigned to sarah.chen@k9x.ai"))
-            db.add(TaskAction(task_id=completed.id, action="started", actor="sarah.chen@k9x.ai"))
-            db.add(TaskAction(task_id=completed.id, action="completed", actor="sarah.chen@k9x.ai",
-                              comment="Approved with correction — agent missed rider addendum on page 4"))
+            # ── Task actions ─────────────────────────────────────────────
+            completed = db.query(Task).filter(Task.correlation_id == "exec-q7r8s9t0").first()
+            if completed and not db.query(TaskAction).filter(TaskAction.task_id == completed.id).first():
+                db.add(TaskAction(task_id=completed.id, action="created", actor="system"))
+                db.add(TaskAction(task_id=completed.id, action="assigned", actor="system", comment="Auto-assigned to sarah.chen@k9x.ai"))
+                db.add(TaskAction(task_id=completed.id, action="started", actor="sarah.chen@k9x.ai"))
+                db.add(TaskAction(task_id=completed.id, action="completed", actor="sarah.chen@k9x.ai",
+                                  comment="Approved with correction — agent missed rider addendum on page 4"))
 
-        escalated = db.query(Task).filter(Task.correlation_id == "exec-u1v2w3x4").first()
-        if escalated and not db.query(TaskAction).filter(TaskAction.task_id == escalated.id).first():
-            db.add(TaskAction(task_id=escalated.id, action="created", actor="system"))
-            db.add(TaskAction(task_id=escalated.id, action="assigned", actor="system", comment="Auto-assigned to james.park@k9x.ai"))
-            db.add(TaskAction(task_id=escalated.id, action="started", actor="james.park@k9x.ai"))
-            db.add(TaskAction(task_id=escalated.id, action="escalated", actor="james.park@k9x.ai",
-                              comment="Ambiguous flood coverage language in zone X — needs manager review"))
+            escalated = db.query(Task).filter(Task.correlation_id == "exec-u1v2w3x4").first()
+            if escalated and not db.query(TaskAction).filter(TaskAction.task_id == escalated.id).first():
+                db.add(TaskAction(task_id=escalated.id, action="created", actor="system"))
+                db.add(TaskAction(task_id=escalated.id, action="assigned", actor="system", comment="Auto-assigned to james.park@k9x.ai"))
+                db.add(TaskAction(task_id=escalated.id, action="started", actor="james.park@k9x.ai"))
+                db.add(TaskAction(task_id=escalated.id, action="escalated", actor="james.park@k9x.ai",
+                                  comment="Ambiguous flood coverage language in zone X — needs manager review"))
 
-        db.commit()
+            db.commit()
 
         # ── Process Studio Implementations / accounts_payable ──────────
         # Registration only — deliberately no example Tasks. The generated
@@ -288,30 +310,61 @@ def seed():
             admin.applications.append(ap_app)
         db.commit()
 
-        # ── K9 Platform / K9X Sentinel ─────────────────────────────────
+    finally:
+        db.close()
+
+
+def seed_internal():
+    """LAN-only instance: one real admin and the real queues. Idempotent;
+    HIL_ADMIN_PASSWORD (re)sets the admin's password on every start."""
+    db = SessionLocal()
+    try:
+        seed_catalog(samples=False)   # same system queues as public, so they can be decided here
+        email = os.getenv("HIL_ADMIN_EMAIL", "ravinatarajan@k9x.ai").strip()
+        password = os.getenv("HIL_ADMIN_PASSWORD", "")
+        admin = db.query(User).filter(User.email == email).first()
+        if not password:
+            log.error("[seed] HIL_PROFILE=internal but HIL_ADMIN_PASSWORD is empty: %s cannot sign in", email)
+        elif admin is None:
+            admin = User(name=os.getenv("HIL_ADMIN_NAME", "Ravi Natarajan"), email=email, role="admin",
+                         department="Platform Engineering", team="k9x",
+                         password_hash=hashlib.sha256(password.encode()).hexdigest())
+            db.add(admin)
+        else:
+            admin.password_hash = hashlib.sha256(password.encode()).hexdigest()
+            admin.is_active = True
+        db.commit()
+
+        if not db.query(Project).filter(Project.name == "K9 Platform").first():
+            db.add(Project(name="K9 Platform", description="K9-AIF framework and ecosystem platform services"))
+        db.commit()
+        k9_proj = db.query(Project).filter(Project.name == "K9 Platform").first()
+
+        # ── K9X Sentinel ─────────────────────────────────────────────
         # K9X Sentinel (k9aif/k9x-sentinel) raises a case here when a newly
         # published threat is a gap or partial gap in the framework's security
         # capabilities, or a dependency floor allows a vulnerable version.
-        # Registration only, no example tasks. Deliberately NOT assigned to
-        # demo: these cases describe weaknesses that may not be fixed yet.
-        # (Assignment only affects the sidebar; /tasks is not filtered by
-        # membership yet — see the Sentinel README's k9x-hil note.)
+        # Internal only: these cases describe weaknesses that may not be fixed yet.
         if not db.query(Application).filter(Application.name == "K9X Sentinel",
                                             Application.project_id == k9_proj.id).first():
             db.add(Application(project_id=k9_proj.id, name="K9X Sentinel",
-                               description="Daily threat watch: new attacks compared with K9-AIF's security capability catalog (sentinel.k9x.ai)"))
+                               description="Daily threat watch: new attacks compared with K9-AIF's security capability catalog"))
         db.commit()
         sec_app = db.query(Application).filter(Application.name == "K9X Sentinel",
                                                Application.project_id == k9_proj.id).first()
         if not db.query(Queue).filter(Queue.topic == "hil.requests.framework_security_updates").first():
             db.add(Queue(application_id=sec_app.id, name="Security tasks",
                          description="A threat K9-AIF does not fully cover, or a vulnerable dependency floor. "
-                                     "Approve to open a private draft advisory / issue on k9-aif-framework.",
+                                     "Approve = accepted, fix planned (Sentinel records the decision).",
                          topic="hil.requests.framework_security_updates",
                          ttl_hours=336, ttl_action="expire"))
-        for user in (ravi, admin):
-            if user and sec_app not in user.applications:
-                user.applications.append(sec_app)
         db.commit()
+        admin = db.query(User).filter(User.email == email).first()
+        if admin:
+            for app in db.query(Application).all():   # the one decider sees every app
+                if app not in admin.applications:
+                    admin.applications.append(app)
+        db.commit()
+        log.info("[seed] internal profile: admin %s, %d queues", email, db.query(Queue).count())
     finally:
         db.close()

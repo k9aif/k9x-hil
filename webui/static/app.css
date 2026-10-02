@@ -600,3 +600,9 @@ body.dark .tt-row-expired { background: #ef444418; }
 .modal-action-error { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 0; }
 .modal-action-error:empty { display: none; }
 .modal-actions button:disabled { opacity: 0.55; cursor: wait; }
+
+/* Public demo: administration is view-only */
+.admin-readonly-note {
+  margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; font-size: 13px;
+  background: rgba(245, 158, 11, .10); border: 1px solid rgba(245, 158, 11, .35); color: #b45309;
+}
