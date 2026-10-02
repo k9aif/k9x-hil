@@ -15,8 +15,7 @@ register disjoint topics, so a task only ever lands in one of them.
 | For | visitors | K9-AIF Framework Administrators only (shown in its header) |
 | Queues | the example applications: EOC, DAS, Continuum, Process Studio AP | K9X Sentinel's Security tasks |
 | Logins | demo/admin, shown on the sign-in page | one admin (`HIL_ADMIN_PASSWORD`), nothing shown |
-| Actions | **none, admin included**: `POST /api/tasks/{id}/action` returns 403 | claim, approve, reject, escalate |
-| Tasks close by | their queue's TTL (expire / reject / escalate) | a decision, or TTL |
+| Actions | admin, manager (demo) or assignee; harmless: no example application consumes the replies | the framework admin |
 
 Internal setup: copy `.env` to `.env.internal` and set the keys in
 `.env.internal.example` (its own `POSTGRES_SCHEMA`, `HIL_CONSUMER_GROUP` and

@@ -718,16 +718,15 @@ function taskDetailHtml(t) {
   const isMyTask = currentUser && t.assigned_to === currentUser.email;
   const isAdmin  = currentUser && currentUser.role === "admin";
   const isManager = currentUser && currentUser.role === "manager";
-  // Public instance: nobody acts (the server refuses too, see /api/meta).
-  const canClaim = !HIL_READ_ONLY && currentUser && !t.assigned_to && ["pending"].includes(t.status);
+  const canClaim = currentUser && !t.assigned_to && ["pending"].includes(t.status);
   const isActive = ["pending","in_progress"].includes(t.status);
   const isEscalated = t.status === "escalated";
   // Escalated tasks were handed up for someone with more authority to
   // decide -- only a manager or admin can, and they must be able to (before
   // this, no one could: the buttons required pending/in_progress).
-  const canAct   = !HIL_READ_ONLY && ((isActive && (isMyTask || isAdmin || isManager))
-                || (isEscalated && (isAdmin || isManager)));
-  const canEscalate = canAct && isActive;
+  const canAct   = (isActive && (isMyTask || isAdmin || isManager))
+                || (isEscalated && (isAdmin || isManager));
+  const canEscalate = isActive && (isMyTask || isAdmin || isManager);
 
   let html = `
     <div class="modal-section">
@@ -842,9 +841,7 @@ function taskDetailHtml(t) {
   }
 
   // Why there are no buttons, when a task is still open but not yours to decide
-  if (HIL_READ_ONLY && (isActive || isEscalated)) {
-    html += `<div class="modal-section"><div class="modal-action-note">Public demo: read-only. You can view this task, but no one (admin included) can claim, approve, reject or escalate it. It closes automatically when its queue's time limit passes.</div></div>`;
-  } else if (!canClaim && !canAct && (isActive || isEscalated)) {
+  if (!canClaim && !canAct && (isActive || isEscalated)) {
     const who = t.assigned_to ? t.assigned_to.split("@")[0] : "";
     const why = isEscalated
       ? "Escalated — waiting for a manager or admin to decide."
@@ -942,10 +939,9 @@ function formatDate(iso) {
 
 // ── Administration panels ───────────────────────────────────────────────────
 
-let HIL_PROFILE = "public", HIL_READ_ONLY = true;
+let HIL_PROFILE = "public";
 fetch("/api/meta").then(r => r.json()).then(m => {
   HIL_PROFILE = m.profile || "public";
-  HIL_READ_ONLY = m.read_only !== false;
   const tryIt = document.getElementById("try-it");
   if (tryIt) tryIt.hidden = HIL_PROFILE !== "public";   // demo logins only on the public site
   for (const id of ["login-internal", "brand-internal"]) {
@@ -965,7 +961,7 @@ function renderAdminLanding() {
     { id: "admin-audit",    icon: "▤", title: "Audit Log",              desc: "Full chain of custody — who did what, when. Export for compliance." },
   ];
   const note = HIL_PROFILE === "public"
-    ? `<div class="admin-readonly-note">Public demo: everything is read-only, for every login including admin. You can view users and tasks; no one can change, approve or reject anything here.</div>` : "";
+    ? `<div class="admin-readonly-note">Public demo: users and roles are view-only here.</div>` : "";
   document.getElementById("admin-landing").innerHTML = `${note}
     <div class="admin-card-grid">
       ${cards.map(c => `<div class="admin-console-card" onclick="switchTab('${c.id}')">

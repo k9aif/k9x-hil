@@ -18,7 +18,7 @@ from backend.seed import seed
 from backend.kafka_consumer import run_consumer
 from backend.ttl_sweep import run_ttl_sweep
 from backend.outbox_sweep import run_outbox_sweep
-from backend.profile import PROFILE, READ_ONLY
+from backend.profile import PROFILE
 
 _ROOT   = Path(__file__).resolve().parent
 _WEBUI  = _ROOT / "webui"
@@ -60,7 +60,6 @@ async def startup():
     ensure_columns()
     seed()
     asyncio.create_task(run_consumer())
-    # Both instances: TTL expiry is how the public (read-only) one closes tasks.
     asyncio.create_task(run_ttl_sweep())
     asyncio.create_task(run_outbox_sweep())
 
@@ -72,9 +71,9 @@ def health():
 
 @app.get("/api/meta")
 def meta():
-    """Public: which instance this is (the sign-in page shows the demo logins
-    only on the public one; the admin panel is labelled read-only there)."""
-    return {"profile": PROFILE, "read_only": READ_ONLY}
+    """Public: which instance this is (demo logins on the public sign-in page,
+    the Framework Administrators label on the internal one)."""
+    return {"profile": PROFILE}
 
 
 @app.get("/{full_path:path}")
