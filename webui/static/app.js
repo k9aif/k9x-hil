@@ -942,8 +942,6 @@ function formatDate(iso) {
 let HIL_PROFILE = "public";
 fetch("/api/meta").then(r => r.json()).then(m => {
   HIL_PROFILE = m.profile || "public";
-  const tryIt = document.getElementById("try-it");
-  if (tryIt) tryIt.hidden = HIL_PROFILE !== "public";   // demo logins only on the public site
   // HIL_BADGE from the instance's env file (e.g. "Internal"); none if unset
   document.querySelectorAll(".hil-badge").forEach(el => {
     el.textContent = m.badge || "";

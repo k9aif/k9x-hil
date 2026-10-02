@@ -23,7 +23,7 @@ def test_profile_values(monkeypatch):
 
 
 def test_meta_endpoint(monkeypatch):
-    """/api/meta drives the sign-in page (demo logins, badge); it must not fail."""
+    """/api/meta drives the badge; it must not fail."""
     monkeypatch.setenv("JWT_SECRET_KEY", os.environ.get("JWT_SECRET_KEY", "test-only"))
     import main
     monkeypatch.setenv("HIL_BADGE", "Internal")
