@@ -944,11 +944,6 @@ fetch("/api/meta").then(r => r.json()).then(m => {
   HIL_PROFILE = m.profile || "public";
   const tryIt = document.getElementById("try-it");
   if (tryIt) tryIt.hidden = HIL_PROFILE !== "public";   // demo logins only on the public site
-  for (const id of ["login-internal", "brand-internal"]) {
-    const el = document.getElementById(id);
-    if (el) el.hidden = HIL_PROFILE !== "internal";
-  }
-  if (HIL_PROFILE === "internal") document.title = "K9X HIL · Internal (K9-AIF Framework Administrators)";
 }).catch(() => {});
 
 function renderAdminLanding() {

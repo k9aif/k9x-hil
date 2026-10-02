@@ -71,8 +71,7 @@ def health():
 
 @app.get("/api/meta")
 def meta():
-    """Public: which instance this is (demo logins on the public sign-in page,
-    the Framework Administrators label on the internal one)."""
+    """Public: which instance this is (demo logins only on the public sign-in page)."""
     return {"profile": PROFILE}
 
 
