@@ -178,10 +178,9 @@ class TaskActionReq(BaseModel):
 def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_db),
                     _: User = Depends(get_current_user)):
     if READ_ONLY:
-        # Public instance: view only, for every role. Decisions happen on the
-        # internal HIL; a decision here would publish a reply and resume the
-        # waiting application.
-        raise HTTPException(403, "This is the public, read-only K9X HIL. Tasks are decided on the internal instance.")
+        # Public instance: view only, for every role (the demo logins are
+        # published). Tasks there close by TTL only.
+        raise HTTPException(403, "This is the public, read-only K9X HIL demo: tasks can be viewed, not acted on.")
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")

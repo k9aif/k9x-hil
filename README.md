@@ -6,24 +6,17 @@ task to their queue's topic and wait for the decision on the reply topic.
 
 ## Two instances, one image
 
-`HIL_PROFILE` decides what an instance is (`backend/profile.py`).
+`HIL_PROFILE` decides what an instance is (`backend/profile.py`). They
+register disjoint topics, so a task only ever lands in one of them.
 
 | | public (default) | internal |
 |---|---|---|
 | Where | hil.k9x.ai (`ubuntu/build-run.sh`, :8086) | LAN only (`ubuntu_internal/build-run.sh`, :8096), never tunnelled |
-| Data | demo projects, sample tasks, demo/admin logins on the sign-in page | real queues (incl. K9X Sentinel's Security tasks), one admin, no demo data |
-| Sees traffic | yes: consumes the registered topics under its own consumer group | yes, under its own group |
-| Decides | **no one, admin included**: `POST /api/tasks/{id}/action` returns 403 | yes |
-| Publishes to Kafka | **never**: no replies, no TTL expiry, no dead-letter queue | replies, TTL expiry, DLQ |
-
-Both instances receive every task message on the topics they register, but
-only the internal one ever answers, so a public copy can never resume a
-waiting application. After a decision the two differ: the public copy stays
-open (it never hears the decision); the internal one shows the outcome.
-
-Queues are registered in `backend/seed.py` (`seed_catalog`); the internal
-instance registers the same system queues as the public one, plus the
-internal-only ones. Sentinel's queue is internal-only.
+| For | visitors | K9-AIF Framework Administrators only (shown in its header) |
+| Queues | the example applications: EOC, DAS, Continuum, Process Studio AP | K9X Sentinel's Security tasks |
+| Logins | demo/admin, shown on the sign-in page | one admin (`HIL_ADMIN_PASSWORD`), nothing shown |
+| Actions | **none, admin included**: `POST /api/tasks/{id}/action` returns 403 | claim, approve, reject, escalate |
+| Tasks close by | their queue's TTL (expire / reject / escalate) | a decision, or TTL |
 
 Internal setup: copy `.env` to `.env.internal` and set the keys in
 `.env.internal.example` (its own `POSTGRES_SCHEMA`, `HIL_CONSUMER_GROUP` and

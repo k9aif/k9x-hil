@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 
 from backend.database import SessionLocal
 from backend.models import Queue, Task, TaskAction
-from backend.profile import READ_ONLY
 
 log = logging.getLogger("k9x-hil.kafka_consumer")
 
@@ -40,10 +39,6 @@ async def _publish_to_dlq(topic: str, raw_value: bytes, reason: str) -> None:
     non-JSON payloads survive intact) plus enough metadata to diagnose
     why it was dead-lettered without needing the original producer."""
     dlq_topic = f"{topic}.dlq"
-    if READ_ONLY:
-        # Public instance publishes nothing; the internal one dead-letters it.
-        log.warning("[kafka_consumer] read-only: skipped malformed message from topic=%s (reason=%s)", topic, reason)
-        return
     envelope = {
         "original_topic": topic,
         "reason": reason,

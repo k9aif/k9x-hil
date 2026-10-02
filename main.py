@@ -60,10 +60,9 @@ async def startup():
     ensure_columns()
     seed()
     asyncio.create_task(run_consumer())
-    if not READ_ONLY:
-        # Both publish replies (TTL expiry, decision outbox): internal only.
-        asyncio.create_task(run_ttl_sweep())
-        asyncio.create_task(run_outbox_sweep())
+    # Both instances: TTL expiry is how the public (read-only) one closes tasks.
+    asyncio.create_task(run_ttl_sweep())
+    asyncio.create_task(run_outbox_sweep())
 
 
 @app.get("/health")

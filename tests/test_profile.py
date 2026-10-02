@@ -34,12 +34,3 @@ def test_public_refuses_task_actions_even_for_admin(monkeypatch):
         routes.perform_action(1, req, db=None, _=object())   # never touches the DB
     assert e.value.status_code == 403
 
-
-def test_public_never_dead_letters(monkeypatch):
-    from backend import kafka_consumer
-    monkeypatch.setattr(kafka_consumer, "READ_ONLY", True)
-
-    async def boom():
-        raise AssertionError("public instance must not create a producer")
-    monkeypatch.setattr(kafka_consumer, "_get_dlq_producer", boom)
-    asyncio.run(kafka_consumer._publish_to_dlq("hil.requests.x", b"{bad", "malformed"))

@@ -606,3 +606,10 @@ body.dark .tt-row-expired { background: #ef444418; }
   margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; font-size: 13px;
   background: rgba(245, 158, 11, .10); border: 1px solid rgba(245, 158, 11, .35); color: #b45309;
 }
+
+/* Internal instance label (K9-AIF Framework Administrators) */
+.internal-badge {
+  margin-top: 6px; display: inline-block; padding: 3px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  background: rgba(220, 38, 38, .12); border: 1px solid rgba(220, 38, 38, .45); color: #dc2626;
+}

@@ -319,7 +319,6 @@ def seed_internal():
     HIL_ADMIN_PASSWORD (re)sets the admin's password on every start."""
     db = SessionLocal()
     try:
-        seed_catalog(samples=False)   # same system queues as public, so they can be decided here
         email = os.getenv("HIL_ADMIN_EMAIL", "ravinatarajan@k9x.ai").strip()
         password = os.getenv("HIL_ADMIN_PASSWORD", "")
         admin = db.query(User).filter(User.email == email).first()
@@ -344,7 +343,8 @@ def seed_internal():
         # K9X Sentinel (k9aif/k9x-sentinel) raises a case here when a newly
         # published threat is a gap or partial gap in the framework's security
         # capabilities, or a dependency floor allows a vulnerable version.
-        # Internal only: these cases describe weaknesses that may not be fixed yet.
+        # Internal only: these cases describe weaknesses that may not be fixed
+        # yet. The example applications' queues stay on the public instance.
         if not db.query(Application).filter(Application.name == "K9X Sentinel",
                                             Application.project_id == k9_proj.id).first():
             db.add(Application(project_id=k9_proj.id, name="K9X Sentinel",
@@ -360,10 +360,8 @@ def seed_internal():
                          ttl_hours=336, ttl_action="expire"))
         db.commit()
         admin = db.query(User).filter(User.email == email).first()
-        if admin:
-            for app in db.query(Application).all():   # the one decider sees every app
-                if app not in admin.applications:
-                    admin.applications.append(app)
+        if admin and sec_app not in admin.applications:
+            admin.applications.append(sec_app)
         db.commit()
         log.info("[seed] internal profile: admin %s, %d queues", email, db.query(Queue).count())
     finally:

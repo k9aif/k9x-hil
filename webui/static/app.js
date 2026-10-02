@@ -843,7 +843,7 @@ function taskDetailHtml(t) {
 
   // Why there are no buttons, when a task is still open but not yours to decide
   if (HIL_READ_ONLY && (isActive || isEscalated)) {
-    html += `<div class="modal-section"><div class="modal-action-note">Public demo: read-only. You can view this task, but no one (admin included) can claim, approve, reject or escalate it here.</div></div>`;
+    html += `<div class="modal-section"><div class="modal-action-note">Public demo: read-only. You can view this task, but no one (admin included) can claim, approve, reject or escalate it. It closes automatically when its queue's time limit passes.</div></div>`;
   } else if (!canClaim && !canAct && (isActive || isEscalated)) {
     const who = t.assigned_to ? t.assigned_to.split("@")[0] : "";
     const why = isEscalated
@@ -948,6 +948,11 @@ fetch("/api/meta").then(r => r.json()).then(m => {
   HIL_READ_ONLY = m.read_only !== false;
   const tryIt = document.getElementById("try-it");
   if (tryIt) tryIt.hidden = HIL_PROFILE !== "public";   // demo logins only on the public site
+  for (const id of ["login-internal", "brand-internal"]) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = HIL_PROFILE !== "internal";
+  }
+  if (HIL_PROFILE === "internal") document.title = "K9X HIL · Internal (K9-AIF Framework Administrators)";
 }).catch(() => {});
 
 function renderAdminLanding() {
