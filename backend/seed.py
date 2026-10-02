@@ -79,6 +79,8 @@ def seed_catalog(samples: bool):
                  description="SBB promotion and architecture pattern governance"),
             dict(project_id=das_proj.id, name="JCIDS",
                  description="Joint Capabilities Integration and Development System pipeline"),
+            dict(project_id=das_proj.id, name="Acquisition",
+                 description="Acquisition pathway selection and milestone packaging (resumed after JROC approval)"),
         ]
         for a in apps_data:
             if not db.query(Application).filter(Application.name == a["name"], Application.project_id == a["project_id"]).first():
@@ -89,6 +91,7 @@ def seed_catalog(samples: bool):
         docver_app = db.query(Application).filter(Application.name == "Document Verification").first()
         archrev_app = db.query(Application).filter(Application.name == "Architecture Review").first()
         jcids_app   = db.query(Application).filter(Application.name == "JCIDS").first()
+        acq_app     = db.query(Application).filter(Application.name == "Acquisition").first()
 
         # ── Assign users to applications ─────────────────────────────
         james = db.query(User).filter(User.email == "james.park@k9x.ai").first()
@@ -105,15 +108,15 @@ def seed_catalog(samples: bool):
         if maria and archrev_app not in maria.applications:
             maria.applications.append(archrev_app)
         if ravi:
-            for app in [claims_app, docver_app, archrev_app, jcids_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app]:
                 if app not in ravi.applications:
                     ravi.applications.append(app)
         if demo:
-            for app in [claims_app, docver_app, archrev_app, jcids_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
         if admin:
-            for app in [claims_app, docver_app, archrev_app, jcids_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app]:
                 if app not in admin.applications:
                     admin.applications.append(app)
         db.commit()
@@ -145,6 +148,12 @@ def seed_catalog(samples: bool):
                              "reviews the assembled capability-gap review package before "
                              "the pipeline may proceed to Acquisition.",
                  topic="workflow.hil.das.jroc",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=acq_app.id, name="Pathway Milestone Review",
+                 description="PATHWAY-MILESTONE gate: milestone decision authority reviews the "
+                             "acquisition pathway package before Systems Engineering begins. "
+                             "Decisions are published back to DAS (das.pathway.replies).",
+                 topic="workflow.hil.das.pathway",
                  ttl_hours=168, ttl_action="reject"),
         ]
         for q in queues_data:
