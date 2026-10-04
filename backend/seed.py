@@ -12,10 +12,23 @@ log = logging.getLogger("k9x-hil.seed")
 
 DAS_PROJECT = "DAS (Defense Acquisition System)"
 
-# public (hil.k9x.ai): demo projects/queues, demo/admin logins on the sign-in
-#   page, read-only (backend/profile.py). internal (LAN): one admin whose
+# public (hil.k9x.ai): demo projects/queues, the demo login on the sign-in
+#   page, read-only (backend/profile.py). The admin password is never shown or
+#   committed: HIL_PUBLIC_ADMIN_PASSWORD, or random (unusable) when unset. internal (LAN): one admin whose
 #   password comes from HIL_ADMIN_PASSWORD, the real queues (K9X Sentinel's
 #   Security tasks), no demo data, no credentials shown.
+
+
+# sha256 of the admin password shipped (and shown on the sign-in page) before v1.2.1
+_RETIRED_ADMIN_HASH = hashlib.sha256(b"admin123").hexdigest()
+
+
+def _admin_password_hash() -> str:
+    pw = os.environ.get("HIL_PUBLIC_ADMIN_PASSWORD", "")
+    if not pw:
+        log.warning("HIL_PUBLIC_ADMIN_PASSWORD not set: admin@k9x.ai gets a random password (cannot sign in)")
+        return hashlib.sha256(secrets.token_bytes(32)).hexdigest()
+    return hashlib.sha256(pw.encode()).hexdigest()
 
 
 def seed():
@@ -51,11 +64,16 @@ def seed_catalog(samples: bool):
                 db.add(User(name="Demo User", email="demo@k9x.ai", role="manager",
                             department="Demo", team="Demo",
                             password_hash=hashlib.sha256(b"demo").hexdigest()))
-            # Admin user
-            if not db.query(User).filter(User.email == "admin@k9x.ai").first():
+            # Admin user -- password from HIL_PUBLIC_ADMIN_PASSWORD, never shown or committed
+            admin_hash = _admin_password_hash()
+            admin = db.query(User).filter(User.email == "admin@k9x.ai").first()
+            if not admin:
                 db.add(User(name="Admin", email="admin@k9x.ai", role="admin",
-                            department="Platform Engineering", team="k9x",
-                            password_hash=hashlib.sha256(b"admin123").hexdigest()))
+                            department="Platform Engineering", team="k9x", password_hash=admin_hash))
+            elif admin.password_hash == _RETIRED_ADMIN_HASH:
+                # the password published in earlier releases no longer works
+                admin.password_hash = admin_hash
+                log.warning("admin@k9x.ai: retired published password replaced")
             db.commit()
 
         # ── Projects ────────────────────────────────────────────────
