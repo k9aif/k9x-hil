@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction
 from backend.auth import create_access_token, get_current_user, require_admin
@@ -117,7 +117,12 @@ def list_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None,
             q = q.filter(Task.queue_id.in_(queue_ids))
         else:
             return []
-    return [_task_dict(t, db) for t in q.all()]
+    tasks = q.all()
+    # one query for every queue + application the page needs (was one per task)
+    ids = {t.queue_id for t in tasks if t.queue_id}
+    queues = ({qr.id: qr for qr in db.query(Queue).options(joinedload(Queue.application))
+               .filter(Queue.id.in_(ids)).all()} if ids else {})
+    return [_task_dict(t, db, queues) for t in tasks]
 
 
 @router.get("/tasks/{task_id}")
@@ -224,8 +229,11 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
              "department": u.department, "team": u.team} for u in db.query(User).all()]
 
 
-def _task_dict(t, db):
-    queue = db.query(Queue).filter(Queue.id == t.queue_id).first() if t.queue_id else None
+def _task_dict(t, db, queues=None):
+    if queues is not None:
+        queue = queues.get(t.queue_id)
+    else:
+        queue = db.query(Queue).filter(Queue.id == t.queue_id).first() if t.queue_id else None
     app = queue.application if queue else None
     return {"id": t.id, "title": t.title, "description": t.description,
             "source_orchestrator": t.source_orchestrator, "source_topic": t.source_topic,
