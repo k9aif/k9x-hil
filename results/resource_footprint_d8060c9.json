@@ -1,0 +1,39 @@
+{
+ "commit": "d8060c9",
+ "date": "2026-10-03",
+ "experiment": "experiments/resource_footprint.py",
+ "setup": "disposable local Postgres 55432 (Homebrew), uvicorn 127.0.0.1:18000, macOS",
+ "change": "GET /tasks loads queues + applications in one query (was N+1)",
+ "rows": [
+  {
+   "pending_tasks": 0,
+   "rss_mb": 75,
+   "threads": 7,
+   "latency_s": 0.049
+  },
+  {
+   "pending_tasks": 100,
+   "rss_mb": 76,
+   "threads": 7,
+   "latency_s": 0.031
+  },
+  {
+   "pending_tasks": 1000,
+   "rss_mb": 80,
+   "threads": 7,
+   "latency_s": 0.074
+  },
+  {
+   "pending_tasks": 5000,
+   "rss_mb": 107,
+   "threads": 7,
+   "latency_s": 0.268
+  }
+ ],
+ "before_8c12891_latency_s": {
+  "0": 0.036,
+  "100": 0.239,
+  "1000": 1.05,
+  "5000": 7.66
+ }
+}
