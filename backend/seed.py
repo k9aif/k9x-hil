@@ -106,6 +106,13 @@ def seed_catalog(samples: bool):
                  description="Joint Capabilities Integration and Development System pipeline"),
             dict(project_id=das_proj.id, name="Acquisition",
                  description="Acquisition pathway selection and milestone packaging (resumed after JROC approval)"),
+            # DAS process model mca-2026-10 (JCIDS ended; Joint Force Requirements Process +
+            # Major Capability Acquisition). The two JCIDS-era applications above stay so
+            # earlier tasks remain readable.
+            dict(project_id=das_proj.id, name="Requirements (JFRP)",
+                 description="Service requirements validation and the parallel Joint Capability Integration review"),
+            dict(project_id=das_proj.id, name="Major Capability Acquisition",
+                 description="Materiel Development Decision, Milestone A and the System Requirements Review"),
         ]
         for a in apps_data:
             if not db.query(Application).filter(Application.name == a["name"], Application.project_id == a["project_id"]).first():
@@ -117,6 +124,8 @@ def seed_catalog(samples: bool):
         archrev_app = db.query(Application).filter(Application.name == "Architecture Review").first()
         jcids_app   = db.query(Application).filter(Application.name == "JCIDS").first()
         acq_app     = db.query(Application).filter(Application.name == "Acquisition").first()
+        jfrp_app    = db.query(Application).filter(Application.name == "Requirements (JFRP)").first()
+        mca_app     = db.query(Application).filter(Application.name == "Major Capability Acquisition").first()
 
         # ── Assign users to applications ─────────────────────────────
         james = db.query(User).filter(User.email == "james.park@k9x.ai").first()
@@ -133,15 +142,15 @@ def seed_catalog(samples: bool):
         if maria and archrev_app not in maria.applications:
             maria.applications.append(archrev_app)
         if ravi:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app]:
                 if app not in ravi.applications:
                     ravi.applications.append(app)
         if demo:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
         if admin:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app]:
                 if app not in admin.applications:
                     admin.applications.append(app)
         db.commit()
@@ -179,6 +188,34 @@ def seed_catalog(samples: bool):
                              "acquisition pathway package before Systems Engineering begins. "
                              "Decisions are published back to DAS (das.pathway.replies).",
                  topic="workflow.hil.das.pathway",
+                 ttl_hours=168, ttl_action="reject"),
+            # DAS process model mca-2026-10: one queue per gate (dow-k9-aif config/process_model.yaml).
+            # Decisions go back on <topic minus "workflow.hil.">.replies.
+            dict(application_id=jfrp_app.id, name="Service Requirements Validation",
+                 description="SERVICE-VALIDATION: the Service requirements board validates the capability "
+                             "requirement. Approval starts the Materiel Development Decision package.",
+                 topic="workflow.hil.das.service-validation",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=jfrp_app.id, name="JCI Review",
+                 description="JCI-REVIEW: joint review by the JROC, JCB or FCB the Joint Staffing Designator "
+                             "names. Runs in parallel and never holds the acquisition flow; record the JROCM "
+                             "(endorse all, some or none, or reject).",
+                 topic="workflow.hil.das.jci-review",
+                 ttl_hours=720, ttl_action="expire"),
+            dict(application_id=mca_app.id, name="Materiel Development Decision",
+                 description="MDD: the Milestone Decision Authority decides the phase of entry and initial "
+                             "review milestone. Approval starts Materiel Solution Analysis.",
+                 topic="workflow.hil.das.mdd",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=mca_app.id, name="Milestone A",
+                 description="MILESTONE-A: the MDA approves entry into TMRR and the acquisition strategy, "
+                             "including its pathway. Approval starts the System Requirements Review package.",
+                 topic="workflow.hil.das.milestone-a",
+                 ttl_hours=168, ttl_action="reject"),
+            dict(application_id=mca_app.id, name="System Requirements Review",
+                 description="SE-REVIEW-SRR: the Service-appointed technical review chair decides whether the "
+                             "system requirements are ready for initial system design.",
+                 topic="workflow.hil.das.srr",
                  ttl_hours=168, ttl_action="reject"),
         ]
         for q in queues_data:
