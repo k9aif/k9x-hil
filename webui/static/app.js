@@ -505,6 +505,7 @@ function taskTableHtml(tasks) {
   return `<div class="task-table-wrap"><table class="task-table">
     <thead><tr>
       <th class="tt-col-pri" onclick="setSort('priority')">Pri ${sortIcon('priority')}</th>
+      <th class="tt-col-job" onclick="setSort('correlation_id')" title="The calling system's job id (correlation id)">Job ID ${sortIcon('correlation_id')}</th>
       <th class="tt-col-title" onclick="setSort('title')">Title ${sortIcon('title')}</th>
       <th class="tt-col-app" onclick="setSort('application_name')">Application ${sortIcon('application_name')}</th>
       <th class="tt-col-queue" onclick="setSort('queue_name')">Queue ${sortIcon('queue_name')}</th>
@@ -523,7 +524,8 @@ function taskTableHtml(tasks) {
         const assignee = t.assigned_to ? t.assigned_to.split("@")[0] : "";
         return `<tr class="${!t.assigned_to ? 'tt-row-unassigned' : ''} ${left !== null && left <= 0 ? 'tt-row-expired' : ''}">
           <td><span class="tt-pri-dot priority-${t.priority}"></span></td>
-          <td class="tt-title">${esc(t.title)}</td>
+          <td class="tt-job" title="${esc(t.correlation_id || "")}">${esc(t.correlation_id || "—")}</td>
+          <td class="tt-title" title="${esc(t.title)}">${esc(t.title)}</td>
           <td class="tt-app">${esc(t.application_name || "")}</td>
           <td class="tt-queue">${esc(t.queue_name || "")}</td>
           <td class="tt-assignee">${assignee ? esc(assignee) : '<span class="tt-unassigned">Unassigned</span>'}</td>
