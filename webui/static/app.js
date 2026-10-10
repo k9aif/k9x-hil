@@ -2,10 +2,10 @@
 
 let currentUser = null;
 let authToken = null;
-let activeTab = "dashboard";
+let activeTab = "home";
 let activeAppId = null;
+let activeQueue = "";           // application page: "" = all queues, else a queue name
 let allTasks = [];
-let dashData = null;
 let allQueues = [];
 let taskFilter = "all";
 let sortCol = "created_at";
@@ -43,17 +43,19 @@ function doLogin(e) {
   });
 }
 
+const PANELS = ["home","app","mytasks","admin","admin-iam","admin-projects","admin-policies","admin-rules","admin-queues","admin-audit"];
+
 function logout() {
   currentUser = null;
   authToken = null;
   localStorage.removeItem("k9x_hil_user");
   localStorage.removeItem("k9x_hil_token");
-  allTasks = []; dashData = null; allQueues = []; activeAppId = null;
+  allTasks = []; allQueues = []; activeAppId = null; activeQueue = "";
   document.getElementById("user-chip").style.display = "none";
   document.getElementById("user-menu").style.display = "none";
+  document.getElementById("nav-current").innerHTML = "";
+  PANELS.forEach(p => { const el = document.getElementById("panel-" + p); if (el) el.classList.remove("active"); });
   document.getElementById("panel-login").classList.add("active");
-  ["dashboard","mytasks","alltasks","queues"].forEach(p =>
-    document.getElementById("panel-" + p).classList.remove("active"));
 }
 
 function toggleUserMenu() {
@@ -69,91 +71,63 @@ function showApp() {
   document.getElementById("user-name").textContent = currentUser.name;
   document.getElementById("user-menu-email").textContent = currentUser.email;
   document.getElementById("user-menu-role").textContent = currentUser.role;
-  buildAppTabs();
-  // Show admin button for admins
   const adminBtn = document.getElementById("header-admin-btn");
   if (adminBtn) adminBtn.style.display = currentUser.role === "admin" ? "flex" : "none";
-  switchTab("dashboard");
-  loadAll();
+  switchTab("home");
 }
 
-// ── Application tabs ────────────────────────────────────────────────────────
+// ── Navigation: Projects → Application ──────────────────────────────────────
+// Home lists the user's projects and their applications; choosing an
+// application opens one page with its tasks by status. The sidebar only shows
+// where you are (project › application), not every application.
 
-function buildAppTabs() {
-  const nav = document.getElementById("app-tabs");
-  if (!nav || !currentUser) return;
-  nav.innerHTML = "";
-  const apps = currentUser.applications || [];
-  if (apps.length === 0) return;
-
-  // Group by project
-  const byProject = {};
-  apps.forEach(a => {
-    if (!byProject[a.project]) byProject[a.project] = [];
-    byProject[a.project].push(a);
+function appsByProject() {
+  const byProject = new Map();
+  (currentUser.applications || []).forEach(a => {
+    if (!byProject.has(a.project)) byProject.set(a.project, []);
+    byProject.get(a.project).push(a);
   });
+  return [...byProject.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
 
-  Object.keys(byProject).forEach(proj => {
-    const projLbl = document.createElement("div");
-    projLbl.className = "nav-project-label";
-    projLbl.innerHTML = `<span style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Project:</span> ${esc(proj)}`;
-    nav.appendChild(projLbl);
-
-    const appLbl = document.createElement("div");
-    appLbl.style.cssText = "font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;padding:4px 16px 2px;";
-    appLbl.textContent = "Applications";
-    nav.appendChild(appLbl);
-
-    byProject[proj].forEach(a => {
-      const btn = document.createElement("button");
-      btn.className = "nav-item nav-app-item";
-      btn.id = "nav-app-" + a.id;
-      btn.innerHTML = `<span class="nav-icon">◉</span> ${esc(a.name)} <span class="nav-badge nav-app-badge" id="badge-app-${a.id}" style="display:none">0</span>`;
-      btn.onclick = () => switchToApp(a.id);
-      nav.appendChild(btn);
-    });
-  });
+function renderNavCurrent() {
+  const el = document.getElementById("nav-current");
+  if (!el) return;
+  const app = activeAppId && (currentUser.applications || []).find(a => a.id === activeAppId);
+  el.innerHTML = app ? `<div class="nav-current">
+      <div class="nav-current-label">Project</div>
+      <div class="nav-current-project" onclick="switchTab('home')" title="All projects">${esc(app.project)}</div>
+      <div class="nav-current-label">Application</div>
+      <div class="nav-current-app">${esc(app.name)}</div>
+    </div>` : "";
 }
 
 function switchToApp(appId) {
   activeAppId = appId;
-  activeTab = "mytasks";
+  activeTab = "app";
+  activeQueue = "";
   taskFilter = "all";
-
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
-  const navEl = document.getElementById("nav-app-" + appId);
-  if (navEl) navEl.classList.add("active");
-
-  ["dashboard","mytasks","alltasks","queues"].forEach(p => {
-    document.getElementById("panel-" + p).classList.remove("active");
-  });
-  document.getElementById("panel-mytasks").classList.add("active");
-
-  // Update sidebar desc
-  document.querySelectorAll(".sidebar-desc").forEach(d => d.style.display = "none");
-  document.getElementById("sidebar-mytasks").style.display = "block";
-
+  PANELS.forEach(p => { const el = document.getElementById("panel-" + p); if (el) el.classList.remove("active"); });
+  document.getElementById("panel-app").classList.add("active");
   const app = (currentUser.applications || []).find(a => a.id === appId);
   document.getElementById("header-tab-title").textContent = app ? app.name : "Tasks";
-
+  renderNavCurrent();
   loadTasksForApp(appId);
 }
 
 async function loadTasksForApp(appId) {
   try {
-    const r = await authFetch("/api/tasks?application_id=" + appId);
-    allTasks = await r.json();
-  } catch { allTasks = []; }
-  renderMyTasks();
+    const [rt, rq] = await Promise.all([authFetch("/api/tasks?application_id=" + appId),
+                                        authFetch("/api/queues?application_id=" + appId)]);
+    allTasks = await rt.json();
+    allQueues = await rq.json();
+  } catch { allTasks = []; allQueues = []; }
+  renderApp();
   updateBadges();
 }
 
 // ── Data loading ────────────────────────────────────────────────────────────
-
-async function loadAll() {
-  await Promise.all([loadTasks(), loadDashboard(), loadQueues()]);
-  render();
-}
 
 async function loadTasks() {
   try {
@@ -162,65 +136,31 @@ async function loadTasks() {
   } catch { allTasks = []; }
 }
 
-async function loadDashboard() {
-  try {
-    const r = await authFetch("/api/dashboard");
-    dashData = await r.json();
-  } catch { dashData = null; }
-}
-
-async function loadQueues() {
-  try {
-    const r = await authFetch("/api/queues");
-    allQueues = await r.json();
-  } catch { allQueues = []; }
-}
-
 // ── Tab switching ───────────────────────────────────────────────────────────
 
-function switchTab(tab, skipLoad) {
+function switchTab(tab) {
   activeTab = tab;
   activeAppId = null;
+  activeQueue = "";
   taskFilter = "all";
 
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
   const navEl = document.getElementById("nav-" + tab);
   if (navEl) navEl.classList.add("active");
-
-  const allPanels = ["dashboard","mytasks","alltasks","queues","admin","admin-iam","admin-projects","admin-policies","admin-rules","admin-queues","admin-audit"];
-  allPanels.forEach(p => {
-    const panel = document.getElementById("panel-" + p);
-    if (panel) panel.classList.remove("active");
-    const sd = document.getElementById("sidebar-" + p);
-    if (sd) sd.style.display = "none";
-  });
+  PANELS.forEach(p => { const el = document.getElementById("panel-" + p); if (el) el.classList.remove("active"); });
   const panel = document.getElementById("panel-" + tab);
   if (panel) panel.classList.add("active");
-  const sd = document.getElementById("sidebar-" + tab);
-  if (sd) sd.style.display = "block";
+  renderNavCurrent();
 
   const titles = {
-    dashboard: "Dashboard", mytasks: "My Tasks", alltasks: "All Tasks", queues: "Queues",
+    home: "Projects", mytasks: "My Tasks",
     admin: "Administration", "admin-iam": "Users & Roles", "admin-projects": "Projects & Applications",
     "admin-policies": "Policies", "admin-rules": "Rules & Automation",
     "admin-queues": "Queues & Topics", "admin-audit": "Audit Log"
   };
   document.getElementById("header-tab-title").textContent = titles[tab] || tab;
 
-  // skipLoad: the caller (filterByQueue/filterByApplication) is about to do
-  // its own, more specific fetch immediately after this call and render the
-  // result directly. Without this, "alltasks"'s unconditional, unawaited
-  // loadTasks().then(render) below raced against that more specific fetch —
-  // whichever resolved LAST won, so a slower unfiltered full-task-list fetch
-  // could silently overwrite an already-rendered, correctly-filtered view
-  // (right title, wrong — unrelated — task list). Real bug, found live: a
-  // queue with 0 tasks (fast, empty response) filtered correctly, then the
-  // full list (slower, larger) landed after and stomped it.
-  if (skipLoad) return;
-
-  if (tab === "dashboard") loadAll();
-  else if (tab === "alltasks") { loadTasks().then(() => render()); }
-  else if (tab === "queues") { loadQueues().then(() => render()); }
+  if (tab === "home" || tab === "mytasks") loadTasks().then(() => render());
   else if (tab === "admin") renderAdminLanding();
   else if (tab === "admin-iam") renderAdminIAM();
   else if (tab === "admin-projects") renderAdminProjects();
@@ -228,31 +168,19 @@ function switchTab(tab, skipLoad) {
   else if (tab === "admin-rules") renderAdminRules();
   else if (tab === "admin-queues") renderAdminQueues();
   else if (tab === "admin-audit") renderAdminAudit();
-  else render();
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
 
 function render() {
-  if (activeTab === "dashboard") renderDashboard();
-  if (activeTab === "mytasks")   renderMyTasks();
-  if (activeTab === "alltasks")  renderAllTasks();
-  if (activeTab === "queues")    renderQueues();
+  if (activeTab === "home")    { renderHome(); renderJobSearch(); }
+  if (activeTab === "app")     renderApp();
+  if (activeTab === "mytasks") renderMyTasks();
   updateBadges();
 }
 
 function updateBadges() {
-  if (!currentUser) return;
-  // Per-app badges
-  (currentUser.applications || []).forEach(app => {
-    const appTasks = allTasks.filter(t => t.application_id === app.id && t.assigned_to === currentUser.email && ["pending","in_progress"].includes(t.status));
-    const badge = document.getElementById("badge-app-" + app.id);
-    if (badge) {
-      if (appTasks.length > 0) { badge.textContent = appTasks.length; badge.style.display = "inline"; }
-      else { badge.style.display = "none"; }
-    }
-  });
-  // Global my tasks badge
+  if (!currentUser || activeTab === "app") return;   // the app page holds only that app's tasks
   const myCount = allTasks.filter(t => t.assigned_to === currentUser.email && ["pending","in_progress"].includes(t.status)).length;
   const badge = document.getElementById("badge-mytasks");
   if (badge) {
@@ -299,186 +227,120 @@ function timeLeftLabel(ms) {
   return d + "d " + (h % 24) + "h left";
 }
 
-// ── Dashboard — Queue-centric, grouped by Project → Application ────────────
+// ── Home: projects and their applications ───────────────────────────────────
 
-function renderDashboard() {
-  if (!dashData) return;
-  const d = dashData;
-  document.getElementById("stat-cards").innerHTML = [
-    statCard("Pending",     d.pending,     "var(--amber)",  "Awaiting action"),
-    statCard("In Progress", d.in_progress, "var(--blue)",   "Being worked on"),
-    statCard("Completed",   d.completed,   "var(--green)",  "Resolved"),
-    statCard("Escalated",   d.escalated,   "var(--orange)", "Needs attention"),
-    statCard("Critical",    d.critical,    "var(--red)",    "Urgent priority"),
-    statCard("Unassigned",  d.unassigned,  "var(--muted)",  "Needs assignment"),
-  ].join("");
+const OPEN_STATUSES = ["pending", "in_progress", "escalated"];
+const isOpen = t => OPEN_STATUSES.includes(t.status);
+// Critical is a priority, not a status: the Critical tab lists critical tasks still open.
+const isCritical = t => String(t.priority || "").toLowerCase() === "critical" && isOpen(t);
 
-  // Pie chart — status breakdown across all active tasks
-  const statusCounts = { pending: d.pending, in_progress: d.in_progress, completed: d.completed, escalated: d.escalated, rejected: d.rejected };
-  const pieHtml = renderPieChart(statusCounts);
+function countsFor(tasks) {
+  return {
+    all: tasks.length,
+    pending: tasks.filter(t => t.status === "pending").length,
+    in_progress: tasks.filter(t => t.status === "in_progress").length,
+    escalated: tasks.filter(t => t.status === "escalated").length,
+    completed: tasks.filter(t => t.status === "completed").length,
+    rejected: tasks.filter(t => t.status === "rejected").length,
+    critical: tasks.filter(isCritical).length,
+  };
+}
 
-  // Queue summary table with ending-soon counts, grouped by Application with
-  // a subtotal row per app (Active/Ending<24h summed across its queues) so
-  // the per-app rollup is visible at a glance without losing per-queue detail.
-  const queueRows = allQueues.map(q => {
-    const qTasks = allTasks.filter(t => t.queue_name === q.name);
-    const active = qTasks.filter(t => ["pending","in_progress"].includes(t.status)).length;
-    const ending24h = qTasks.filter(t => {
-      if (!["pending","in_progress"].includes(t.status)) return false;
-      const left = taskTimeLeft(t);
-      return left !== null && left > 0 && left <= 86400000;
-    }).length;
-    // High/critical tasks still waiting: lights the red bulb on the application row.
-    const urgent = qTasks.filter(t => ["pending","in_progress"].includes(t.status)
-                                      && ["high","critical"].includes(String(t.priority || "").toLowerCase())).length;
-    return { name: q.name, app: q.application, topic: q.topic, active, ending24h, urgent, appId: q.application_id, queueId: q.id };
-  });
-
-  const appGroups = new Map(); // appId -> { app, rows: [] }
-  for (const r of queueRows) {
-    if (!appGroups.has(r.appId)) appGroups.set(r.appId, { app: r.app, rows: [] });
-    appGroups.get(r.appId).rows.push(r);
+function renderHome() {
+  const el = document.getElementById("project-grid");
+  if (!el || !currentUser) return;
+  const projects = appsByProject();
+  if (!projects.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No applications are assigned to you yet.</div></div>';
+    return;
   }
-  const sortedApps = [...appGroups.entries()].sort((a, b) => a[1].app.localeCompare(b[1].app));
-
-  const groupsHtml = sortedApps.map(([appId, group]) => {
-    const rows = [...group.rows].sort((a, b) => a.name.localeCompare(b.name));
-    const subActive = rows.reduce((s, r) => s + r.active, 0);
-    const subEnding = rows.reduce((s, r) => s + r.ending24h, 0);
-    const subUrgent = rows.reduce((s, r) => s + r.urgent, 0);
-    const bulb = subUrgent > 0
-      ? `<span class="dash-alert" title="${subUrgent} high/critical task${subUrgent > 1 ? "s" : ""} waiting"></span>` : "";
-    const subtotalRow = `<tr class="dash-app-subtotal" onclick="filterByApplication(${appId},'${esc(group.app)}')">
-      <td class="dash-app-name" colspan="2">${esc(group.app)}${bulb}</td>
-      <td class="dash-qt-count">${subActive}</td>
-      <td class="dash-qt-urgent${subEnding > 0 ? ' dash-qt-red' : ''}">${subEnding > 0 ? subEnding : '—'}</td>
-    </tr>`;
-    const detailRows = rows.map(r => `<tr class="dash-queue-row" onclick="event.stopPropagation(); filterByQueue(${r.queueId},'${esc(r.name)}')">
-      <td class="dash-qt-name dash-qt-nested">${esc(r.name)}</td>
-      <td></td>
-      <td class="dash-qt-count">${r.active}</td>
-      <td class="dash-qt-urgent${r.ending24h > 0 ? ' dash-qt-red' : ''}">${r.ending24h > 0 ? r.ending24h : '—'}</td>
-    </tr>`).join("");
-    return subtotalRow + detailRows;
-  }).join("");
-
-  let html = `<div class="dash-overview">
-    <div class="dash-pie-section">
-      <div class="section-title">Status Breakdown</div>
-      ${pieHtml}
-    </div>
-    <div class="dash-table-section">
-      <div class="section-title">Queue Summary</div>
-      <table class="dash-queue-table">
-        <thead><tr>
-          <th>Queue</th><th>Application</th><th>Active</th><th>Ending &lt;24h</th>
-        </tr></thead>
+  el.innerHTML = projects.map(([project, apps]) => `
+    <div class="project-card">
+      <div class="project-card-title">${esc(project)}</div>
+      <table class="project-app-table">
+        <thead><tr><th>Application</th><th>Pending</th><th>In progress</th><th>Escalated</th><th>Critical</th><th>Completed</th></tr></thead>
         <tbody>
-          ${groupsHtml}
+          ${apps.sort((a, b) => a.name.localeCompare(b.name)).map(a => {
+            const c = countsFor(allTasks.filter(t => t.application_id === a.id));
+            const n = (v, cls) => v ? `<span class="${cls}">${v}</span>` : '<span class="muted">—</span>';
+            return `<tr class="project-app-row" onclick="switchToApp(${a.id})" title="Open ${esc(a.name)}">
+              <td class="project-app-name">${esc(a.name)} <span class="project-app-go">›</span></td>
+              <td>${n(c.pending, "cnt-pending")}</td>
+              <td>${n(c.in_progress, "cnt-progress")}</td>
+              <td>${n(c.escalated, "cnt-escalated")}</td>
+              <td>${n(c.critical, "cnt-critical")}</td>
+              <td>${n(c.completed, "cnt-completed")}</td>
+            </tr>`;
+          }).join("")}
         </tbody>
       </table>
-    </div>
-  </div>`;
-
-  // Dashboard is a summary, not a task browser: stat cards + Recent Activity
-  // (pie chart, Queue Summary table) only. Clicking a queue row above already
-  // navigates to that queue's filtered task list via filterByQueue() -- the
-  // per-app/per-queue task cards that used to repeat below this were fully
-  // redundant with that click-through and with the Queues page.
-  document.getElementById("recent-tasks").innerHTML = html;
+    </div>`).join("");
 }
 
-function renderPieChart(statusCounts) {
-  const entries = [
-    { label: "Pending",     value: statusCounts.pending || 0,     color: "#f59e0b" },
-    { label: "In Progress", value: statusCounts.in_progress || 0, color: "#6366f1" },
-    { label: "Completed",   value: statusCounts.completed || 0,   color: "#10b981" },
-    { label: "Escalated",   value: statusCounts.escalated || 0,   color: "#fb923c" },
-    { label: "Rejected",    value: statusCounts.rejected || 0,    color: "#ef4444" },
-  ];
-  const total = entries.reduce((s, e) => s + e.value, 0);
-  if (total === 0) return '<div class="dash-pie-empty">No tasks</div>';
+// ── Application page: status tabs, queue filter, sortable table ─────────────
 
-  const cx = 80, cy = 80, r = 70;
-  let startAngle = -Math.PI / 2;
-  let paths = "";
-
-  entries.forEach(e => {
-    if (e.value === 0) return;
-    const pct = e.value / total;
-    const angle = pct * 2 * Math.PI;
-    const endAngle = startAngle + angle;
-    const largeArc = angle > Math.PI ? 1 : 0;
-    const x1 = cx + r * Math.cos(startAngle);
-    const y1 = cy + r * Math.sin(startAngle);
-    const x2 = cx + r * Math.cos(endAngle);
-    const y2 = cy + r * Math.sin(endAngle);
-    if (pct >= 1) {
-      paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${e.color}" />`;
-    } else {
-      paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc},1 ${x2},${y2} Z" fill="${e.color}" />`;
-    }
-    startAngle = endAngle;
-  });
-
-  const legend = entries.filter(e => e.value > 0).map(e =>
-    `<div class="pie-legend-item">
-      <span class="pie-legend-dot" style="background:${e.color}"></span>
-      <span class="pie-legend-label">${e.label}</span>
-      <span class="pie-legend-value">${e.value}</span>
-    </div>`
-  ).join("");
-
-  return `<div class="pie-wrap">
-    <svg viewBox="0 0 160 160" width="140" height="140">${paths}</svg>
-    <div class="pie-legend">${legend}</div>
-  </div>`;
+function renderApp() {
+  if (!currentUser || !activeAppId) return;
+  const app = (currentUser.applications || []).find(a => a.id === activeAppId);
+  document.getElementById("app-crumb").innerHTML = app
+    ? `<a onclick="switchTab('home')">Projects</a> › ${esc(app.project)} › <strong>${esc(app.name)}</strong>` : "";
+  const inQueue = activeQueue ? allTasks.filter(t => t.queue_name === activeQueue) : allTasks;
+  const queues = [...new Set([...allQueues.map(q => q.name), ...allTasks.map(t => t.queue_name).filter(Boolean)])].sort();
+  const queueSelect = queues.length > 1 ? `<select class="queue-select" onchange="setQueue(this.value)" title="Filter by queue">
+      <option value="">All queues</option>
+      ${queues.map(q => `<option value="${esc(q)}" ${q === activeQueue ? "selected" : ""}>${esc(q)}</option>`).join("")}
+    </select>` : "";
+  document.getElementById("app-filters").innerHTML = statusTabs(inQueue) + queueSelect;
+  const rows = applySort(applyFilter(inQueue));
+  document.getElementById("app-list").innerHTML = rows.length
+    ? taskTableHtml(rows, false)
+    : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks here</div></div>';
 }
 
-function statCard(label, value, color, sub) {
-  return `<div class="stat-card">
-    <div class="stat-card-label">${label}</div>
-    <div class="stat-card-value" style="color:${color}">${value}</div>
-    <div class="stat-card-sub">${sub}</div>
-  </div>`;
+function setQueue(q) {
+  activeQueue = q;
+  render();
 }
 
-// ── My Tasks (filtered by app if selected) ──────────────────────────────────
+// ── My Tasks ────────────────────────────────────────────────────────────────
 
 function renderMyTasks() {
   if (!currentUser) return;
-  let mine = allTasks.filter(t => t.assigned_to === currentUser.email);
-  if (activeAppId) mine = allTasks.filter(t => t.application_id === activeAppId);
-  const filtered = applyFilter(mine);
-  const sorted = applySort(filtered);
-
-  document.getElementById("mytask-filters").innerHTML = filterBar();
-  document.getElementById("mytask-list").innerHTML = sorted.length
-    ? taskTableHtml(sorted)
-    : `<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">${activeAppId ? "No tasks in this application" : "No tasks assigned to you"}</div></div>`;
+  const mine = allTasks.filter(t => t.assigned_to === currentUser.email);
+  document.getElementById("mytask-filters").innerHTML = statusTabs(mine);
+  const rows = applySort(applyFilter(mine));
+  document.getElementById("mytask-list").innerHTML = rows.length
+    ? taskTableHtml(rows, true)
+    : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks assigned to you</div></div>';
 }
 
-// ── All Tasks ───────────────────────────────────────────────────────────────
+// ── Status tabs, filtering and sorting ──────────────────────────────────────
 
-function renderAllTasks() {
-  const filtered = applyFilter(allTasks);
-  const sorted = applySort(filtered);
-  document.getElementById("alltask-filters").innerHTML = filterBar();
-  document.getElementById("alltask-list").innerHTML = sorted.length
-    ? taskTableHtml(sorted)
-    : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks matching filter</div></div>';
+function statusTabs(tasks) {
+  const c = countsFor(tasks);
+  const tabs = [["all", "All"], ["pending", "Pending"], ["in_progress", "In progress"], ["escalated", "Escalated"],
+                ["completed", "Completed"], ["critical", "Critical"]];
+  if (c.rejected) tabs.push(["rejected", "Rejected"]);
+  return `<div class="status-tabs">${tabs.map(([k, label]) =>
+    `<button class="status-tab status-tab-${k} ${taskFilter === k ? "active" : ""}" onclick="setFilter('${k}')">${label} <span class="status-tab-count">${c[k]}</span></button>`
+  ).join("")}</div>`;
 }
 
 function applyFilter(tasks) {
   if (taskFilter === "all") return tasks;
-  if (taskFilter === "unassigned") return tasks.filter(t => !t.assigned_to);
+  if (taskFilter === "critical") return tasks.filter(isCritical);
   return tasks.filter(t => t.status === taskFilter);
 }
+
+const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+const STATUS_RANK = { escalated: 0, pending: 1, in_progress: 2, completed: 3, rejected: 4, expired: 5 };
 
 function applySort(tasks) {
   return [...tasks].sort((a, b) => {
     let va = a[sortCol], vb = b[sortCol];
     if (sortCol === "time_left") { va = taskTimeLeft(a) ?? Infinity; vb = taskTimeLeft(b) ?? Infinity; }
+    if (sortCol === "priority") { va = PRIORITY_RANK[String(a.priority).toLowerCase()] ?? 9; vb = PRIORITY_RANK[String(b.priority).toLowerCase()] ?? 9; }
+    if (sortCol === "status") { va = STATUS_RANK[a.status] ?? 9; vb = STATUS_RANK[b.status] ?? 9; }
     if (va == null) va = "";
     if (vb == null) vb = "";
     if (typeof va === "string") va = va.toLowerCase();
@@ -500,102 +362,43 @@ function sortIcon(col) {
   return sortDir === 1 ? '<span class="sort-icon active">▲</span>' : '<span class="sort-icon active">▼</span>';
 }
 
-function taskTableHtml(tasks) {
-  const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+// Every column header sorts (click again to reverse). showApp: add the
+// Application column where rows can come from several applications.
+function taskTableHtml(tasks, showApp) {
+  const th = (col, label, cls, title) =>
+    `<th class="${cls}" onclick="setSort('${col}')"${title ? ` title="${title}"` : ""}>${label} ${sortIcon(col)}</th>`;
   return `<div class="task-table-wrap"><table class="task-table">
     <thead><tr>
-      <th class="tt-col-pri" onclick="setSort('priority')">Pri ${sortIcon('priority')}</th>
-      <th class="tt-col-job" onclick="setSort('correlation_id')" title="The calling system's job id (correlation id)">Job ID ${sortIcon('correlation_id')}</th>
-      <th class="tt-col-title" onclick="setSort('title')">Title ${sortIcon('title')}</th>
-      <th class="tt-col-app" onclick="setSort('application_name')">Application ${sortIcon('application_name')}</th>
-      <th class="tt-col-queue" onclick="setSort('queue_name')">Queue ${sortIcon('queue_name')}</th>
-      <th class="tt-col-assignee" onclick="setSort('assigned_to')">Assignee ${sortIcon('assigned_to')}</th>
-      <th class="tt-col-status" onclick="setSort('status')">Status ${sortIcon('status')}</th>
-      <th class="tt-col-ttl" onclick="setSort('time_left')">Time Left ${sortIcon('time_left')}</th>
-      <th class="tt-col-age" onclick="setSort('created_at')">Age ${sortIcon('created_at')}</th>
-      <th class="tt-col-action"></th>
+      ${th("correlation_id", "Job ID", "tt-col-job", "The calling system's job id (correlation id)")}
+      ${th("title", "Title", "tt-col-title")}
+      ${showApp ? th("application_name", "Application", "tt-col-app") : ""}
+      ${th("queue_name", "Queue", "tt-col-queue")}
+      ${th("status", "Status", "tt-col-status")}
+      ${th("priority", "Priority", "tt-col-pri")}
+      ${th("assigned_to", "Assigned to", "tt-col-assignee")}
+      ${th("time_left", "Time left", "tt-col-ttl")}
+      ${th("created_at", "Created", "tt-col-age")}
     </tr></thead>
     <tbody>
       ${tasks.map(t => {
         const left = taskTimeLeft(t);
-        const leftLabel = timeLeftLabel(left);
         const pct = taskUrgencyPct(t);
-        const color = pct !== null ? urgencyColor(pct) : "";
+        const color = pct !== null && isOpen(t) ? urgencyColor(pct) : "";
         const assignee = t.assigned_to ? t.assigned_to.split("@")[0] : "";
-        return `<tr class="${!t.assigned_to ? 'tt-row-unassigned' : ''} ${left !== null && left <= 0 ? 'tt-row-expired' : ''}">
-          <td><span class="tt-pri-dot priority-${t.priority}"></span></td>
-          <td class="tt-job" title="${esc(t.correlation_id || "")}">${esc(t.correlation_id || "—")}</td>
+        return `<tr class="tt-row ${!t.assigned_to ? 'tt-row-unassigned' : ''} ${left !== null && left <= 0 && isOpen(t) ? 'tt-row-expired' : ''}" onclick="openTask(${t.id})" title="Open task">
+          <td class="tt-job">${esc(t.correlation_id || "—")}</td>
           <td class="tt-title" title="${esc(t.title)}">${esc(t.title)}</td>
-          <td class="tt-app">${esc(t.application_name || "")}</td>
+          ${showApp ? `<td class="tt-app">${esc(t.application_name || "")}</td>` : ""}
           <td class="tt-queue">${esc(t.queue_name || "")}</td>
-          <td class="tt-assignee">${assignee ? esc(assignee) : '<span class="tt-unassigned">Unassigned</span>'}</td>
           <td><span class="badge badge-${t.status}">${t.status.replace(/_/g," ")}</span></td>
-          <td class="tt-ttl" ${color ? `style="color:${color}"` : ""}>${leftLabel}</td>
-          <td class="tt-age">${timeAgo(t.created_at)}</td>
-          <td><button class="btn btn-outline btn-sm" onclick="openTask(${t.id})">View</button></td>
+          <td><span class="tt-pri-dot priority-${t.priority}"></span> ${esc(t.priority || "")}</td>
+          <td class="tt-assignee">${assignee ? esc(assignee) : '<span class="tt-unassigned">Unassigned</span>'}</td>
+          <td class="tt-ttl" ${color ? `style="color:${color}"` : ""}>${isOpen(t) ? timeLeftLabel(left) : ""}</td>
+          <td class="tt-age" title="${esc(formatDate(t.created_at))}">${timeAgo(t.created_at)}</td>
         </tr>`;
       }).join("")}
     </tbody>
   </table></div>`;
-}
-
-// ── Queues ───────────────────────────────────────────────────────────────────
-
-function renderQueues() {
-  document.getElementById("queue-grid").innerHTML = allQueues.length
-    ? allQueues.map(q => `
-      <div class="queue-card" onclick="filterByQueue(${q.id},'${esc(q.name)}')">
-        <div class="queue-card-name">${esc(q.name)}</div>
-        <div class="queue-card-desc">${esc(q.description || "")}</div>
-        <div class="queue-card-footer">
-          <span class="queue-card-topic">${esc(q.topic || "")}</span>
-          <span class="queue-card-count">${q.active_count} active</span>
-        </div>
-        <div class="queue-card-app">${esc(q.application || "")}</div>
-      </div>
-    `).join("")
-    : '<div class="empty-state"><div class="empty-state-icon">◫</div><div class="empty-state-text">No queues configured</div></div>';
-}
-
-async function filterByQueue(queueId, queueName) {
-  switchTab("alltasks", true);
-  try {
-    const r = await authFetch("/api/tasks?queue_id=" + queueId);
-    allTasks = await r.json();
-  } catch { allTasks = []; }
-  document.getElementById("header-tab-title").textContent = queueName;
-  document.getElementById("alltask-filters").innerHTML = `
-    <button class="filter-btn active">${esc(queueName)}</button>
-    <button class="filter-btn" onclick="switchTab('alltasks')">← All Tasks</button>
-  `;
-  document.getElementById("alltask-list").innerHTML = allTasks.length
-    ? allTasks.map(t => taskCardHtml(t)).join("")
-    : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks in this queue</div></div>';
-}
-
-async function filterByApplication(applicationId, appName) {
-  switchTab("alltasks", true);
-  try {
-    const r = await authFetch("/api/tasks?application_id=" + applicationId);
-    allTasks = await r.json();
-  } catch { allTasks = []; }
-  document.getElementById("header-tab-title").textContent = appName;
-  document.getElementById("alltask-filters").innerHTML = `
-    <button class="filter-btn active">${esc(appName)} (all queues)</button>
-    <button class="filter-btn" onclick="switchTab('alltasks')">← All Tasks</button>
-  `;
-  document.getElementById("alltask-list").innerHTML = allTasks.length
-    ? allTasks.map(t => taskCardHtml(t)).join("")
-    : '<div class="empty-state"><div class="empty-state-icon">◇</div><div class="empty-state-text">No tasks for this application</div></div>';
-}
-
-// ── Filter bar ──────────────────────────────────────────────────────────────
-
-function filterBar() {
-  const statuses = ["all","unassigned","pending","in_progress","completed","escalated","rejected"];
-  return statuses.map(s =>
-    `<button class="filter-btn ${taskFilter === s ? 'active' : ''}" onclick="setFilter('${s}')">${s === "all" ? "All" : s === "unassigned" ? "Unassigned" : s.replace(/_/g," ")}</button>`
-  ).join("");
 }
 
 function setFilter(f) {
@@ -603,25 +406,41 @@ function setFilter(f) {
   render();
 }
 
-// ── Job ID search (Dashboard) ───────────────────────────────────────────────
+
+// ── Job ID search (Projects page) ───────────────────────────────────────────
 // A calling system's job id travels as the task's correlation_id (DAS: JOB-YYYYMMDD-XXXXXX).
-// Lists every task that job raised, across applications and queues.
+// Lists every task that job raised, across applications and queues, in the sortable table.
+let jobSearch = null;   // { term, tasks } while a search is shown
+
 async function searchJob(e) {
   if (e) e.preventDefault();
-  const box = document.getElementById("job-search-results");
   const term = (document.getElementById("job-search-input").value || "").trim();
-  if (!term) { box.innerHTML = ""; return; }
-  box.innerHTML = `<div class="empty-state">Searching…</div>`;
+  if (!term) { jobSearch = null; renderJobSearch(); return; }
+  document.getElementById("job-search-results").innerHTML = `<div class="empty-state">Searching…</div>`;
   let tasks = [];
   try {
     const r = await authFetch("/api/tasks?correlation_id=" + encodeURIComponent(term));
     tasks = r.ok ? await r.json() : [];
   } catch { tasks = []; }
+  jobSearch = { term, tasks };
+  renderJobSearch();
+}
+
+function clearJobSearch() {
+  jobSearch = null;
+  document.getElementById("job-search-input").value = "";
+  renderJobSearch();
+}
+
+function renderJobSearch() {
+  const box = document.getElementById("job-search-results");
+  if (!box) return;
+  if (!jobSearch) { box.innerHTML = ""; return; }
+  const { term, tasks } = jobSearch;
   box.innerHTML = tasks.length
-    ? `<div class="section-title">${tasks.length} task${tasks.length > 1 ? "s" : ""} for “${esc(term)}”</div>` +
-      tasks.map(t => taskCardHtml(t).replace('<div class="task-card-title">',
-        `<div class="task-card-title"><span class="task-app-label">${esc(t.correlation_id || "")}</span> `)).join("")
-    : `<div class="empty-state">No task with a Job ID containing “${esc(term)}”.</div>`;
+    ? `<div class="section-title">${tasks.length} task${tasks.length > 1 ? "s" : ""} for “${esc(term)}” <a class="clear-search" onclick="clearJobSearch()">clear</a></div>` +
+      taskTableHtml(applySort(tasks), true)
+    : `<div class="empty-state">No task with a Job ID containing “${esc(term)}”. <a class="clear-search" onclick="clearJobSearch()">clear</a></div>`;
 }
 
 // ── Task card HTML ──────────────────────────────────────────────────────────
@@ -927,7 +746,7 @@ async function taskAction(taskId, action) {
   }
 
   if (activeAppId) await loadTasksForApp(activeAppId);
-  else await loadAll();
+  else { await loadTasks(); if (jobSearch) await searchJob(); render(); }
   // Claiming makes the task yours -- reopen it so Approve/Reject are right
   // there, instead of closing the dialog and making the user find it again.
   if (action === "claim" || action === "start") await openTask(taskId);
@@ -1296,7 +1115,7 @@ async function renderAdminProjects() {
 }
 
 async function renderAdminQueues() {
-  await loadQueues();
+  try { allQueues = await (await authFetch("/api/queues")).json(); } catch { allQueues = []; }
   document.getElementById("admin-queues-content").innerHTML = `
     <div class="admin-section">
       <div class="section-title">Queue → Topic Mappings</div>
