@@ -107,6 +107,11 @@
 
     <!-- Dashboard panel -->
     <div class="panel" id="panel-dashboard">
+      <form class="job-search" onsubmit="searchJob(event)">
+        <input type="search" id="job-search-input" placeholder="Search by Job ID (e.g. JOB-20261010-64805A or 64805A)" autocomplete="off" />
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+      <div class="task-list" id="job-search-results" style="margin-bottom:18px"></div>
       <div class="stat-cards" id="stat-cards"></div>
       <div class="section-title" style="margin-top:24px">Recent Activity</div>
       <div class="task-list" id="recent-tasks"></div>

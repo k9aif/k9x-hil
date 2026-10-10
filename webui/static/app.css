@@ -616,3 +616,8 @@ body.dark .tt-row-expired { background: #ef444418; }
   font-size: 11px; font-weight: 600; letter-spacing: .03em;
   background: rgba(220, 38, 38, .12); border: 1px solid rgba(220, 38, 38, .45); color: #dc2626;
 }
+
+/* Dashboard: Job ID search */
+.job-search { display: flex; gap: 8px; margin-bottom: 12px; max-width: 640px; }
+.job-search input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border, #334155);
+  background: var(--surface, transparent); color: inherit; font-size: 13px; }

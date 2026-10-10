@@ -601,6 +601,27 @@ function setFilter(f) {
   render();
 }
 
+// ── Job ID search (Dashboard) ───────────────────────────────────────────────
+// A calling system's job id travels as the task's correlation_id (DAS: JOB-YYYYMMDD-XXXXXX).
+// Lists every task that job raised, across applications and queues.
+async function searchJob(e) {
+  if (e) e.preventDefault();
+  const box = document.getElementById("job-search-results");
+  const term = (document.getElementById("job-search-input").value || "").trim();
+  if (!term) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="empty-state">Searching…</div>`;
+  let tasks = [];
+  try {
+    const r = await authFetch("/api/tasks?correlation_id=" + encodeURIComponent(term));
+    tasks = r.ok ? await r.json() : [];
+  } catch { tasks = []; }
+  box.innerHTML = tasks.length
+    ? `<div class="section-title">${tasks.length} task${tasks.length > 1 ? "s" : ""} for “${esc(term)}”</div>` +
+      tasks.map(t => taskCardHtml(t).replace('<div class="task-card-title">',
+        `<div class="task-card-title"><span class="task-app-label">${esc(t.correlation_id || "")}</span> `)).join("")
+    : `<div class="empty-state">No task with a Job ID containing “${esc(term)}”.</div>`;
+}
+
 // ── Task card HTML ──────────────────────────────────────────────────────────
 
 function taskCardHtml(t) {

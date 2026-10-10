@@ -62,3 +62,18 @@ if __name__ == "__main__":
     test_listing_query_count_does_not_grow_with_tasks()
     print("OK" if not failures else f"{len(failures)} failure(s)")
     sys.exit(1 if failures else 0)
+
+
+def test_search_by_job_id():
+    """Dashboard Job ID search: tasks whose correlation_id contains the term, any case."""
+    engine, db = _db(0)
+    q = db.query(Queue).first()
+    db.add_all([Task(queue_id=q.id, title="SV", correlation_id="JOB-20261010-64805A"),
+                Task(queue_id=q.id, title="JCI", correlation_id="JOB-20261010-64805A"),
+                Task(queue_id=q.id, title="Other", correlation_id="JOB-20261009-AAAAAA")])
+    db.commit()
+    rows = list_tasks(status=None, assigned_to=None, application_id=None, queue_id=None,
+                      correlation_id="64805a", db=db, _=None)
+    assert sorted(r["title"] for r in rows) == ["JCI", "SV"]
+    assert len(list_tasks(status=None, assigned_to=None, application_id=None, queue_id=None,
+                          correlation_id="  ", db=db, _=None)) == 3

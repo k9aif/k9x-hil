@@ -103,8 +103,12 @@ def list_queues(application_id: Optional[int] = None, db: Session = Depends(get_
 @router.get("/tasks")
 def list_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None,
                application_id: Optional[int] = None, queue_id: Optional[int] = None,
+               correlation_id: Optional[str] = None,
                db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     q = db.query(Task).order_by(Task.created_at.desc())
+    if correlation_id and correlation_id.strip():
+        # Job ID search (e.g. a DAS job: JOB-20261010-64805A, or just 64805A): every task it raised
+        q = q.filter(Task.correlation_id.ilike(f"%{correlation_id.strip()[:100]}%"))
     if status:
         q = q.filter(Task.status == status)
     if assigned_to:
