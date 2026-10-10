@@ -32,6 +32,8 @@ def _admin_password_hash() -> str:
 
 
 def seed():
+    if PROFILE == "instance":
+        return seed_instance()
     if PROFILE == "internal":
         return seed_internal()
     return seed_catalog(samples=True)
@@ -435,5 +437,69 @@ def seed_internal():
             admin.applications.append(sec_app)
         db.commit()
         log.info("[seed] internal profile: admin %s, %d queues", email, db.query(Queue).count())
+    finally:
+        db.close()
+
+
+def seed_instance():
+    """A dedicated instance (HIL_INSTANCE): the projects, applications and queues of its file,
+    an admin from HIL_ADMIN_EMAIL / HIL_ADMIN_PASSWORD (reset on every start), and the
+    demo/demo login only when the file says demo_login: true. Idempotent."""
+    from backend.instance import load_instance
+    cfg = load_instance()
+    db = SessionLocal()
+    try:
+        email = os.getenv("HIL_ADMIN_EMAIL", "admin@k9x.ai").strip()
+        password = os.getenv("HIL_ADMIN_PASSWORD", "")
+        admin = db.query(User).filter(User.email == email).first()
+        pw_hash = (hashlib.sha256(password.encode()).hexdigest() if password
+                   else hashlib.sha256(secrets.token_bytes(32)).hexdigest())
+        if not password:
+            log.error("[seed] HIL_INSTANCE=%s but HIL_ADMIN_PASSWORD is empty: %s cannot sign in", cfg["id"], email)
+        if admin is None:
+            admin = User(name=os.getenv("HIL_ADMIN_NAME", "Administrator"), email=email, role="admin",
+                         department="Platform Engineering", team="k9x", password_hash=pw_hash)
+            db.add(admin)
+        else:
+            admin.password_hash, admin.is_active, admin.role = pw_hash, True, "admin"
+        demo = None
+        if cfg.get("demo_login"):
+            demo = db.query(User).filter(User.email == "demo@k9x.ai").first()
+            if demo is None:
+                demo = User(name="Demo User", email="demo@k9x.ai", role="manager", department="Demo",
+                            team="k9x", password_hash=hashlib.sha256(b"demo").hexdigest())
+                db.add(demo)
+        db.commit()
+
+        apps = []
+        for p in cfg.get("projects") or []:
+            proj = db.query(Project).filter(Project.name == p["name"]).first()
+            if proj is None:
+                proj = Project(name=p["name"], description=p.get("description"))
+                db.add(proj); db.commit()
+            for a in p.get("applications") or []:
+                app = db.query(Application).filter(Application.name == a["name"],
+                                                   Application.project_id == proj.id).first()
+                if app is None:
+                    app = Application(project_id=proj.id, name=a["name"], description=a.get("description"))
+                    db.add(app); db.commit()
+                apps.append(app)
+                for q in a.get("queues") or []:
+                    queue = db.query(Queue).filter(Queue.topic == q["topic"]).first()
+                    if queue is None:
+                        db.add(Queue(application_id=app.id, name=q["name"], description=q.get("description"),
+                                     topic=q["topic"], ttl_hours=q.get("ttl_hours"), ttl_action=q.get("ttl_action")))
+                    else:   # the file is the source of truth for this instance's queues
+                        queue.application_id, queue.name = app.id, q["name"]
+                        queue.description = q.get("description")
+                        queue.ttl_hours, queue.ttl_action = q.get("ttl_hours"), q.get("ttl_action")
+        db.commit()
+        for user in (u for u in (db.query(User).filter(User.email == email).first(), demo) if u):
+            for app in apps:
+                if app not in user.applications:
+                    user.applications.append(app)
+        db.commit()
+        log.info("[seed] instance %s: %d queues, admin %s%s", cfg["id"], db.query(Queue).count(), email,
+                 ", demo login" if demo else "")
     finally:
         db.close()

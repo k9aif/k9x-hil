@@ -155,3 +155,14 @@ class HilReplyOutbox(Base):
     created_at      = Column(DateTime, server_default=func.now())
     last_attempt_at = Column(DateTime)
     published_at    = Column(DateTime)
+
+
+class Branding(Base):
+    """An instance's branding (HIL_INSTANCE), edited by its admin; the instance file is the default."""
+    __tablename__ = "branding"
+    __table_args__ = {"schema": _SCHEMA}
+
+    key        = Column(String(40), primary_key=True)
+    value      = Column(Text)
+    updated_by = Column(String(255))
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

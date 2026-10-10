@@ -1,0 +1,58 @@
+# Dedicated K9X HIL for DAS (Defense Acquisition System, k9aif/dow-k9x).
+# Queues: one per gate of DAS process model mca-2026-10 (dow-k9x src/k9_dow/config/process_model.yaml);
+# DAS publishes tasks on workflow.hil.das.<gate> and reads decisions on das.<gate>.replies.
+id: das
+branding:
+  name: "K9X HIL · DAS"
+  subtitle: "Human decisions for the Defense Acquisition System"
+  accent: "#d97706"
+  logo_text: "DAS"
+  about: >
+    Every gate in DAS is a human decision made here: Service requirements validation, the
+    Joint Capability Integration review (in parallel, never blocking), the Materiel Development
+    Decision, Milestone A and the System Requirements Review. DAS agents prepare each package;
+    a named person decides, and the decision goes back to DAS with who, when and why.
+demo_login: true
+projects:
+  - name: "DAS (Defense Acquisition System)"
+    description: "Requirements to acquisition: Joint Force Requirements Process and Major Capability Acquisition"
+    applications:
+      - name: "Requirements (JFRP)"
+        description: "Service requirements validation and the parallel Joint Capability Integration review"
+        queues:
+          - name: "Service Requirements Validation"
+            topic: "workflow.hil.das.service-validation"
+            description: "SERVICE-VALIDATION: the Service requirements board validates the capability requirement. Approval starts the MDD package."
+            ttl_hours: 168
+            ttl_action: reject
+          - name: "JCI Review"
+            topic: "workflow.hil.das.jci-review"
+            description: "JCI-REVIEW: joint review by the JROC, JCB or FCB the Joint Staffing Designator names. Parallel; never holds the flow. Record the JROCM."
+            ttl_hours: 720
+            ttl_action: expire
+      - name: "Major Capability Acquisition"
+        description: "Materiel Development Decision, Milestone A and the System Requirements Review"
+        queues:
+          - name: "Materiel Development Decision"
+            topic: "workflow.hil.das.mdd"
+            description: "MDD: the Milestone Decision Authority decides the phase of entry and the initial review milestone."
+            ttl_hours: 168
+            ttl_action: reject
+          - name: "Milestone A"
+            topic: "workflow.hil.das.milestone-a"
+            description: "MILESTONE-A: the MDA approves TMRR entry and the acquisition strategy, including its pathway."
+            ttl_hours: 168
+            ttl_action: reject
+          - name: "System Requirements Review"
+            topic: "workflow.hil.das.srr"
+            description: "SE-REVIEW-SRR: the Service-appointed technical review chair decides."
+            ttl_hours: 168
+            ttl_action: reject
+jobs:
+  title: "DAS jobs"
+  stages:
+    - {label: "Service validation", topic: "workflow.hil.das.service-validation"}
+    - {label: "JCI review (parallel)", topic: "workflow.hil.das.jci-review", blocking: false}
+    - {label: "MDD", topic: "workflow.hil.das.mdd"}
+    - {label: "Milestone A", topic: "workflow.hil.das.milestone-a"}
+    - {label: "SRR", topic: "workflow.hil.das.srr"}

@@ -72,9 +72,23 @@ def health():
 
 @app.get("/api/meta")
 def meta():
-    """Public: which instance this is and its optional HIL_BADGE text, shown
-    next to the logo (e.g. "Internal")."""
-    return {"profile": PROFILE, "badge": os.getenv("HIL_BADGE", "").strip()[:40]}
+    """Public: which instance this is, its optional HIL_BADGE text (e.g. "Internal") and, for a
+    dedicated instance (HIL_INSTANCE), its branding and whether it has a Jobs view."""
+    out = {"profile": PROFILE, "badge": os.getenv("HIL_BADGE", "").strip()[:40]}
+    if PROFILE == "instance":
+        from backend.database import SessionLocal
+        from backend.instance import load_instance
+        from backend.routes import current_branding
+        cfg = load_instance() or {}
+        db = SessionLocal()
+        try:
+            out["branding"] = current_branding(db)
+        finally:
+            db.close()
+        out["instance"] = cfg.get("id")
+        out["demo_login"] = bool(cfg.get("demo_login"))
+        out["jobs_view"] = bool((cfg.get("jobs") or {}).get("stages"))
+    return out
 
 
 @app.get("/{full_path:path}")

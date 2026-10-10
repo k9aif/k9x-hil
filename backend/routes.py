@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
-from backend.models import User, Project, Application, Queue, Task, TaskAction
+from backend.models import User, Project, Application, Queue, Task, TaskAction, Branding
 from backend.auth import create_access_token, get_current_user, require_admin
 from backend.task_actions import apply_task_action, TaskConflictError
 
@@ -256,3 +256,77 @@ def _task_dict(t, db, queues=None):
 
 def _iso(dt):
     return dt.isoformat() if dt else None
+
+
+# ── Dedicated instance (HIL_INSTANCE): branding and the Jobs view ────────────
+
+def current_branding(db: Session) -> dict:
+    """The instance file's branding, overridden by what its admin saved."""
+    from backend.instance import load_instance
+    cfg = load_instance() or {}
+    out = dict(cfg.get("branding") or {})
+    try:
+        for row in db.query(Branding).all():
+            if row.value is not None:
+                out[row.key] = row.value
+    except Exception:
+        pass
+    return out
+
+
+class BrandingReq(BaseModel):
+    name: Optional[str] = None
+    subtitle: Optional[str] = None
+    accent: Optional[str] = None
+    about: Optional[str] = None
+    logo_text: Optional[str] = None
+
+
+@router.put("/branding")
+def put_branding(req: BrandingReq, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    from backend.instance import InstanceError, clean_branding, load_instance
+    if load_instance() is None:
+        raise HTTPException(400, "Branding is set per dedicated instance (HIL_INSTANCE)")
+    try:
+        values = clean_branding({k: v for k, v in req.model_dump().items() if v is not None})
+    except InstanceError as exc:
+        raise HTTPException(422, str(exc))
+    for key, value in values.items():
+        row = db.query(Branding).filter(Branding.key == key).first()
+        if row is None:
+            db.add(Branding(key=key, value=value, updated_by=admin.email))
+        else:
+            row.value, row.updated_by = value, admin.email
+    db.commit()
+    return current_branding(db)
+
+
+@router.get("/jobs")
+def list_jobs(limit: int = 100, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """One row per job (task correlation_id) across the instance's stage queues, newest first:
+    for each stage, the task (if any) with its status, assignee and last decision."""
+    from backend.instance import load_instance
+    cfg = load_instance() or {}
+    stages = (cfg.get("jobs") or {}).get("stages") or []
+    if not stages:
+        return {"title": None, "stages": [], "jobs": []}
+    by_topic = {q.topic: q for q in db.query(Queue).filter(Queue.topic.in_([st["topic"] for st in stages])).all()}
+    queue_ids = [q.id for q in by_topic.values()]
+    tasks = (db.query(Task).filter(Task.queue_id.in_(queue_ids), Task.correlation_id.isnot(None))
+             .order_by(Task.created_at.desc()).all()) if queue_ids else []
+    topic_of = {q.id: t for t, q in by_topic.items()}
+    jobs: dict = {}
+    for t in tasks:
+        job = jobs.setdefault(t.correlation_id, {"job_id": t.correlation_id, "first_seen": _iso(t.created_at),
+                                                 "stages": {}})
+        job["first_seen"] = min(job["first_seen"] or "", _iso(t.created_at) or "") or job["first_seen"]
+        topic = topic_of.get(t.queue_id)
+        if topic and topic not in job["stages"]:          # newest task per stage wins
+            job["stages"][topic] = {"task_id": t.id, "status": t.status, "assigned_to": t.assigned_to,
+                                    "updated_at": _iso(t.updated_at)}
+    rows = sorted(jobs.values(), key=lambda j: j["first_seen"] or "", reverse=True)[:max(1, min(limit, 500))]
+    return {"title": (cfg.get("jobs") or {}).get("title") or "Jobs",
+            "stages": [{"topic": st["topic"], "label": st.get("label") or st["topic"],
+                        "queue_id": by_topic[st["topic"]].id if st["topic"] in by_topic else None,
+                        "blocking": st.get("blocking", True)} for st in stages],
+            "jobs": rows}

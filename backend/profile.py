@@ -6,10 +6,12 @@ public    hil.k9x.ai. The example applications' tasks (EOC, DAS, Continuum,
           nothing outside this HIL.
 internal  LAN only, for K9-AIF Framework Administrators: K9X Sentinel's
           Security tasks, decided by the framework admin.
+instance  A dedicated HIL for one project (HIL_INSTANCE=<name>, backend/instance.py):
+          its own branding, queues, Jobs view and schema, e.g. DAS.
 
 The two register disjoint topics, so a task only ever lands in one of them.
 """
 
 import os
 
-PROFILE = os.getenv("HIL_PROFILE", "public").strip().lower()
+PROFILE = "instance" if os.getenv("HIL_INSTANCE", "").strip() else os.getenv("HIL_PROFILE", "public").strip().lower()
