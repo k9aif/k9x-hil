@@ -72,6 +72,10 @@ def seed_catalog(samples: bool):
             if not admin:
                 db.add(User(name="Admin", email="admin@k9x.ai", role="admin",
                             department="Platform Engineering", team="k9x", password_hash=admin_hash))
+            elif os.environ.get("HIL_PUBLIC_ADMIN_PASSWORD", ""):
+                # Set in .env: it is the admin's password, reset on every start (as for the
+                # internal profile), so setting it later works for an existing admin too.
+                admin.password_hash = admin_hash
             elif admin.password_hash == _RETIRED_ADMIN_HASH:
                 # the password published in earlier releases no longer works
                 admin.password_hash = admin_hash
