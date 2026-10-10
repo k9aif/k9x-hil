@@ -48,6 +48,14 @@ projects:
             description: "SE-REVIEW-SRR: the Service-appointed technical review chair decides."
             ttl_hours: 168
             ttl_action: reject
+      - name: "DAS Governance"
+        description: "Governance holds: k9x Shield or Granite Guardian refused an agent's input mid-stage; override or stop"
+        queues:
+          - name: "Governance Holds"
+            topic: "workflow.hil.das.governance-hold"
+            description: "GOVERNANCE-HOLD: approve = override that one check for that job and stage (recorded); reject = stop the job."
+            ttl_hours: 72
+            ttl_action: reject
 jobs:
   title: "DAS jobs"
   stages:
@@ -56,3 +64,4 @@ jobs:
     - {label: "MDD", topic: "workflow.hil.das.mdd"}
     - {label: "Milestone A", topic: "workflow.hil.das.milestone-a"}
     - {label: "SRR", topic: "workflow.hil.das.srr"}
+    - {label: "Governance holds", topic: "workflow.hil.das.governance-hold", blocking: false}
