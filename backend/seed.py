@@ -115,6 +115,8 @@ def seed_catalog(samples: bool):
                  description="Service requirements validation and the parallel Joint Capability Integration review"),
             dict(project_id=das_proj.id, name="Major Capability Acquisition",
                  description="Materiel Development Decision, Milestone A and the System Requirements Review"),
+            dict(project_id=das_proj.id, name="DAS Governance",
+                 description="Governance holds: k9x Shield or Granite Guardian refused an agent's input mid-stage; override or stop"),
         ]
         for a in apps_data:
             if not db.query(Application).filter(Application.name == a["name"], Application.project_id == a["project_id"]).first():
@@ -128,6 +130,7 @@ def seed_catalog(samples: bool):
         acq_app     = db.query(Application).filter(Application.name == "Acquisition").first()
         jfrp_app    = db.query(Application).filter(Application.name == "Requirements (JFRP)").first()
         mca_app     = db.query(Application).filter(Application.name == "Major Capability Acquisition").first()
+        gov_app     = db.query(Application).filter(Application.name == "DAS Governance").first()
 
         # ── Assign users to applications ─────────────────────────────
         james = db.query(User).filter(User.email == "james.park@k9x.ai").first()
@@ -144,15 +147,15 @@ def seed_catalog(samples: bool):
         if maria and archrev_app not in maria.applications:
             maria.applications.append(archrev_app)
         if ravi:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app, gov_app]:
                 if app not in ravi.applications:
                     ravi.applications.append(app)
         if demo:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app, gov_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
         if admin:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app]:
+            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app, gov_app]:
                 if app not in admin.applications:
                     admin.applications.append(app)
         db.commit()
@@ -219,6 +222,12 @@ def seed_catalog(samples: bool):
                              "system requirements are ready for initial system design.",
                  topic="workflow.hil.das.srr",
                  ttl_hours=168, ttl_action="reject"),
+            dict(application_id=gov_app.id, name="Governance Holds",
+                 description="GOVERNANCE-HOLD: k9x governance refused an agent's input while DAS prepared a package. "
+                             "The job and its finished work are kept. Approve = override that one check for that job "
+                             "and stage (recorded with your name); reject = stop the job.",
+                 topic="workflow.hil.das.governance-hold",
+                 ttl_hours=72, ttl_action="reject"),
         ]
         for q in queues_data:
             if not db.query(Queue).filter(Queue.topic == q["topic"]).first():
