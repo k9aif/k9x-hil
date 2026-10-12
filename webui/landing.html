@@ -50,6 +50,13 @@
   .hero { padding-block: 92px 84px; min-height: 560px; }
   .hero h1 { max-width: 640px; }
   .hero .lede { max-width: 600px; }
+  .oss { margin-left: 10px; color: var(--hil); border: 1px solid rgba(240,164,107,.5); border-radius: 4px; padding: 1px 7px;
+         letter-spacing: .04em; text-transform: none; font-weight: 600; white-space: nowrap; }
+  .run { margin-top: 26px; background: #0a1322; border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .run h3 { margin: 0 0 4px; font-size: 16px; }
+  .run p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+  .run pre { margin: 0; overflow-x: auto; font: 13px/1.7 var(--mono); color: var(--text); }
+  .run pre .c { color: #7f8ba0; }
   .eyebrow { font: 700 12px var(--mono); color: var(--teal); letter-spacing: .08em; text-transform: uppercase; }
   h1 { font-size: clamp(32px, 4.8vw, 52px); line-height: 1.08; margin: 12px 0 18px; letter-spacing: -1px; font-weight: 700; }
   h1 em { font-style: normal; color: var(--hil); }
@@ -148,6 +155,7 @@
       <a href="#architecture">Architecture</a>
       <a href="#per-project">Per project</a>
       <a href="#k9aif">K9-AIF</a>
+      <a href="https://github.com/k9aif/k9x-hil" target="_blank" rel="noopener">GitHub ↗</a>
       <a href="#scope">Scope</a>
       <a class="signin" href="#login">Login</a>
     </nav>
@@ -157,7 +165,7 @@
 <div class="hero-band">
   <div class="hero-art" aria-hidden="true"></div>
   <div class="wrap hero">
-    <div class="eyebrow">Human-in-the-loop case management</div>
+    <div class="eyebrow">Human-in-the-loop case management <span class="oss">Open source · Apache 2.0</span></div>
     <h1>When an agent needs a person, the decision is <em>made here</em>.</h1>
     <p class="lede">K9X HIL is where AI applications built on K9-AIF hand a decision to a human: a review gate,
       an escalated finding, a low-confidence result. Each request arrives over Kafka as a task in its
@@ -251,6 +259,15 @@
         <div class="brand-tile" style="--c:#38bdf8"><b>Your project</b><span>your name, colours and queues; the same Kafka round trip</span></div>
       </div>
     </div>
+    <div class="run">
+      <h3>Run your own, for your organisation</h3>
+      <p>K9X HIL is open source under the Apache 2.0 licence. Clone it, describe your instance in two files, and start it.</p>
+<pre>git clone https://github.com/k9aif/k9x-hil &amp;&amp; cd k9x-hil
+cp instances/das.yaml instances/acme.yaml   <span class="c"># id: acme; name, colours, logo text; projects, applications, queues</span>
+cp .env.sample .env.acme                    <span class="c"># your PostgreSQL, Kafka and storage</span>
+cat .env.das.example &gt;&gt; .env.acme           <span class="c"># then set HIL_INSTANCE=acme, port, schema, consumer group, secrets</span>
+bash ubuntu_instance/build-run.sh all acme  <span class="c"># build the image and start your instance</span></pre>
+    </div>
   </section>
 
   <section id="k9aif">
@@ -285,7 +302,7 @@
 <footer>
   <div class="wrap">
     <span>K9X HIL · part of the K9X ecosystem, built on the K9-AIF framework</span>
-    <span><a href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai</a> · Apache 2.0</span>
+    <span><a href="https://github.com/k9aif/k9x-hil" target="_blank" rel="noopener">Source on GitHub</a> · Apache 2.0 · <a href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai</a></span>
   </div>
 </footer>
 
