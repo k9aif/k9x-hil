@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from backend.database import SessionLocal
-from backend.models import User, Project, Application, Queue, Task, TaskAction
+from backend.models import User, Project, Application, Queue, Task, TaskAction, HilReplyOutbox, user_applications
 import hashlib
 import logging
 import os
@@ -11,6 +11,7 @@ from backend.profile import PROFILE
 log = logging.getLogger("k9x-hil.seed")
 
 DAS_PROJECT = "DAS (Defense Acquisition System)"
+DAS_DESCRIPTION = "Requirements to acquisition: Joint Force Requirements Process and Major Capability Acquisition"
 
 # public (hil.k9x.ai): demo projects/queues, the demo login on the sign-in
 #   page, read-only (backend/profile.py). The admin password is never shown or
@@ -21,6 +22,37 @@ DAS_PROJECT = "DAS (Defense Acquisition System)"
 
 # sha256 of the admin password shipped (and shown on the sign-in page) before v1.2.1
 _RETIRED_ADMIN_HASH = hashlib.sha256(b"admin123").hexdigest()
+
+
+# JCIDS ended (2025-08-20); DAS now runs the Joint Force Requirements Process and Major
+# Capability Acquisition (process model mca-2026-10) and no longer publishes to these
+# applications' queues (workflow.hil.das.jroc, workflow.hil.das.pathway).
+RETIRED_DAS_APPLICATIONS = ("JCIDS", "Acquisition")
+
+
+def _retire_das_applications(db, das_proj) -> None:
+    """Remove the JCIDS-era DAS applications with their queues and tasks (idempotent)."""
+    apps = db.query(Application).filter(Application.project_id == das_proj.id,
+                                        Application.name.in_(RETIRED_DAS_APPLICATIONS)).all()
+    if not apps:
+        return
+    app_ids, app_names = [a.id for a in apps], [a.name for a in apps]
+    queue_ids = [q.id for q in db.query(Queue).filter(Queue.application_id.in_(app_ids)).all()]
+    task_ids = [t.id for t in db.query(Task).filter(Task.queue_id.in_(queue_ids)).all()] if queue_ids else []
+    if task_ids:
+        db.query(TaskAction).filter(TaskAction.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(HilReplyOutbox).filter(HilReplyOutbox.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(Task).filter(Task.id.in_(task_ids)).delete(synchronize_session=False)
+    if queue_ids:
+        db.query(Queue).filter(Queue.id.in_(queue_ids)).delete(synchronize_session=False)
+    db.execute(user_applications.delete().where(user_applications.c.application_id.in_(app_ids)))
+    db.query(Application).filter(Application.id.in_(app_ids)).delete(synchronize_session=False)
+    db.commit()
+    # Bulk deletes bypass the session: drop its copies (e.g. users' application lists) so
+    # nothing later in the seed touches a deleted row.
+    db.expunge_all()
+    log.info("Retired JCIDS-era DAS applications %s: %d queues, %d tasks removed",
+             app_names, len(queue_ids), len(task_ids))
 
 
 def _admin_password_hash() -> str:
@@ -93,8 +125,14 @@ def seed_catalog(samples: bool):
         if old_das:
             old_das.name = DAS_PROJECT
         elif not db.query(Project).filter(Project.name == DAS_PROJECT).first():
-            db.add(Project(name=DAS_PROJECT, description="Defense Acquisition System — DoDAF/JCIDS/Acquisition/SE reference pipeline"))
+            db.add(Project(name=DAS_PROJECT, description=DAS_DESCRIPTION))
         db.commit()
+        das = db.query(Project).filter(Project.name == DAS_PROJECT).first()
+        if das and das.description != DAS_DESCRIPTION:
+            das.description = DAS_DESCRIPTION
+            db.commit()
+
+        _retire_das_applications(db, db.query(Project).filter(Project.name == DAS_PROJECT).first())
 
         demo_proj = db.query(Project).filter(Project.name == "Demo").first()
         k9_proj   = db.query(Project).filter(Project.name == "K9 Platform").first()
@@ -108,13 +146,8 @@ def seed_catalog(samples: bool):
                  description="OCR extraction verification for insurance documents"),
             dict(project_id=k9_proj.id, name="Architecture Review",
                  description="SBB promotion and architecture pattern governance"),
-            dict(project_id=das_proj.id, name="JCIDS",
-                 description="Joint Capabilities Integration and Development System pipeline"),
-            dict(project_id=das_proj.id, name="Acquisition",
-                 description="Acquisition pathway selection and milestone packaging (resumed after JROC approval)"),
-            # DAS process model mca-2026-10 (JCIDS ended; Joint Force Requirements Process +
-            # Major Capability Acquisition). The two JCIDS-era applications above stay so
-            # earlier tasks remain readable.
+            # DAS process model mca-2026-10 (Joint Force Requirements Process + Major Capability
+            # Acquisition). The JCIDS-era applications are retired (_retire_das_applications).
             dict(project_id=das_proj.id, name="Requirements (JFRP)",
                  description="Service requirements validation and the parallel Joint Capability Integration review"),
             dict(project_id=das_proj.id, name="Major Capability Acquisition",
@@ -130,8 +163,6 @@ def seed_catalog(samples: bool):
         claims_app = db.query(Application).filter(Application.name == "EOC").first()
         docver_app = db.query(Application).filter(Application.name == "Document Verification").first()
         archrev_app = db.query(Application).filter(Application.name == "Architecture Review").first()
-        jcids_app   = db.query(Application).filter(Application.name == "JCIDS").first()
-        acq_app     = db.query(Application).filter(Application.name == "Acquisition").first()
         jfrp_app    = db.query(Application).filter(Application.name == "Requirements (JFRP)").first()
         mca_app     = db.query(Application).filter(Application.name == "Major Capability Acquisition").first()
         gov_app     = db.query(Application).filter(Application.name == "DAS Governance").first()
@@ -151,15 +182,15 @@ def seed_catalog(samples: bool):
         if maria and archrev_app not in maria.applications:
             maria.applications.append(archrev_app)
         if ravi:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app, gov_app]:
+            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app]:
                 if app not in ravi.applications:
                     ravi.applications.append(app)
         if demo:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app, gov_app]:
+            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
         if admin:
-            for app in [claims_app, docver_app, archrev_app, jcids_app, acq_app, jfrp_app, mca_app, gov_app]:
+            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app]:
                 if app not in admin.applications:
                     admin.applications.append(app)
         db.commit()
@@ -185,18 +216,6 @@ def seed_catalog(samples: bool):
             dict(application_id=archrev_app.id, name="Compliance Approval",
                  description="Regulatory compliance sign-offs for production deployment",
                  topic="workflow.hil.k9platform.architecture.compliance",
-                 ttl_hours=168, ttl_action="reject"),
-            dict(application_id=jcids_app.id, name="JROC Review",
-                 description="JROC-VALIDATION gate: program manager or JROC representative "
-                             "reviews the assembled capability-gap review package before "
-                             "the pipeline may proceed to Acquisition.",
-                 topic="workflow.hil.das.jroc",
-                 ttl_hours=168, ttl_action="reject"),
-            dict(application_id=acq_app.id, name="Pathway Milestone Review",
-                 description="PATHWAY-MILESTONE gate: milestone decision authority reviews the "
-                             "acquisition pathway package before Systems Engineering begins. "
-                             "Decisions are published back to DAS (das.pathway.replies).",
-                 topic="workflow.hil.das.pathway",
                  ttl_hours=168, ttl_action="reject"),
             # DAS process model mca-2026-10: one queue per gate (dow-k9-aif config/process_model.yaml).
             # Decisions go back on <topic minus "workflow.hil.">.replies.
