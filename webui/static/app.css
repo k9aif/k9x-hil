@@ -666,3 +666,7 @@ body.dark .tt-row-expired { background: #ef444418; }
 .tt-row { cursor: pointer; }
 .tt-row:hover td { background: var(--accent-dim); }
 .clear-search { color: var(--accent); cursor: pointer; font-size: 12px; font-weight: 400; margin-left: 8px; }
+
+/* First page overview: pie + at-a-glance cards, above the projects */
+.home-overview { margin: 0 0 18px; align-items: start; }
+.home-overview .stat-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }

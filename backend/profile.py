@@ -1,9 +1,9 @@
 """Which K9X HIL instance this is (HIL_PROFILE).
 
 public    hil.k9x.ai. The example applications' tasks (EOC, DAS, Continuum,
-          Process Studio AP), demo/admin logins shown. Deciding is allowed: no
-          example application consumes the replies, so a decision changes
-          nothing outside this HIL.
+          Process Studio AP); signs in on its landing page (demo login). Deciding
+          is allowed and real for the demonstrations: DAS and Continuum consume
+          the replies, so approving a DAS gate moves that DAS job on.
 internal  LAN only, for K9-AIF Framework Administrators: K9X Sentinel's
           Security tasks, decided by the framework admin.
 instance  A dedicated HIL for one project (HIL_INSTANCE=<name>, backend/instance.py):

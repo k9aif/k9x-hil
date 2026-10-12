@@ -50,6 +50,8 @@ function logout() {
   authToken = null;
   localStorage.removeItem("k9x_hil_user");
   localStorage.removeItem("k9x_hil_token");
+  // The public instance signs in on its landing page; the others on the card below.
+  if (HIL_PROFILE === "public") { location.href = "/"; return; }
   allTasks = []; allQueues = []; activeAppId = null; activeQueue = "";
   document.getElementById("user-chip").style.display = "none";
   document.getElementById("user-menu").style.display = "none";
@@ -246,7 +248,77 @@ function countsFor(tasks) {
   };
 }
 
+// Overview at the top of the first page: a colour-coded status pie and the
+// at-a-glance counts, over the same tasks the project tables below show.
+const STATUS_COLORS = [
+  { key: "pending",     label: "Pending",     color: "#f59e0b" },
+  { key: "in_progress", label: "In progress", color: "#6366f1" },
+  { key: "escalated",   label: "Escalated",   color: "#fb923c" },
+  { key: "completed",   label: "Completed",   color: "#10b981" },
+  { key: "rejected",    label: "Rejected",    color: "#ef4444" },
+];
+
+function renderPieChart(counts) {
+  const entries = STATUS_COLORS.map(s => ({ ...s, value: counts[s.key] || 0 }));
+  const total = entries.reduce((n, e) => n + e.value, 0);
+  if (total === 0) return '<div class="dash-pie-empty">No tasks yet</div>';
+  const cx = 80, cy = 80, r = 70;
+  let start = -Math.PI / 2, paths = "";
+  entries.forEach(e => {
+    if (!e.value) return;
+    const angle = e.value / total * 2 * Math.PI, end = start + angle;
+    if (e.value === total) {
+      paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${e.color}"><title>${e.label}: ${e.value}</title></circle>`;
+    } else {
+      const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
+      const x2 = cx + r * Math.cos(end),   y2 = cy + r * Math.sin(end);
+      paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${angle > Math.PI ? 1 : 0},1 ${x2},${y2} Z" fill="${e.color}"><title>${e.label}: ${e.value}</title></path>`;
+    }
+    start = end;
+  });
+  const legend = entries.filter(e => e.value).map(e => `<div class="pie-legend-item">
+      <span class="pie-legend-dot" style="background:${e.color}"></span>
+      <span class="pie-legend-label">${e.label}</span>
+      <span class="pie-legend-value">${e.value}</span></div>`).join("");
+  return `<div class="pie-wrap"><svg viewBox="0 0 160 160" width="150" height="150">${paths}</svg>
+    <div class="pie-legend">${legend}</div></div>`;
+}
+
+function statCard(label, value, color, sub) {
+  return `<div class="stat-card">
+    <div class="stat-card-label">${label}</div>
+    <div class="stat-card-value" style="color:${color}">${value}</div>
+    <div class="stat-card-sub">${sub}</div>
+  </div>`;
+}
+
+function renderHomeOverview() {
+  const el = document.getElementById("home-overview");
+  if (!el) return;
+  if (!allTasks.length) { el.innerHTML = ""; return; }
+  const c = countsFor(allTasks);
+  const unassigned = allTasks.filter(t => t.status === "pending" && !t.assigned_to).length;
+  el.innerHTML = `<div class="project-card dash-overview home-overview">
+    <div class="dash-pie-section">
+      <div class="section-title">Status breakdown</div>
+      ${renderPieChart(c)}
+    </div>
+    <div>
+      <div class="section-title">At a glance</div>
+      <div class="stat-cards">
+        ${statCard("Pending",     c.pending,     "var(--amber)",  "Awaiting action")}
+        ${statCard("In progress", c.in_progress, "var(--blue)",   "Being worked on")}
+        ${statCard("Escalated",   c.escalated,   "var(--orange)", "Needs attention")}
+        ${statCard("Critical",    c.critical,    "var(--red)",    "Open, critical priority")}
+        ${statCard("Completed",   c.completed,   "var(--green)",  "Resolved")}
+        ${statCard("Unassigned",  unassigned,    "var(--muted)",  "Pending, no assignee")}
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderHome() {
+  renderHomeOverview();
   const el = document.getElementById("project-grid");
   if (!el || !currentUser) return;
   const projects = appsByProject();
@@ -790,15 +862,43 @@ fetch("/api/meta").then(r => r.json()).then(m => {
     el.hidden = !m.badge;
   });
   if (m.badge) document.title = `${document.title} · ${m.badge}`;
-  // Public instance: the sign-in form defaults to the shared demo login and links back to
-  // the landing page. Internal and dedicated instances show no demo login.
+  // A dedicated instance (HIL_INSTANCE) wears its project's branding: name, subtitle,
+  // accent colour, logo text and about text from instances/<name>.yaml, or as its admin saved them.
+  if (m.branding) applyBranding(m.branding);
+  // The public instance (and a dedicated one with demo_login: true) defaults the sign-in
+  // form to the shared demo login; the public one also links back to its landing page.
+  // The internal instance shows no demo login.
+  // Public instance: its landing page is the only sign-in page.
+  if (HIL_PROFILE === "public" && !localStorage.getItem("k9x_hil_token")) { location.replace("/"); return; }
   const tryIt = document.getElementById("try-it");
-  if (HIL_PROFILE !== "public") { if (tryIt) tryIt.hidden = true; return; }
+  const demo = HIL_PROFILE === "public" || m.demo_login;
+  if (!demo) { if (tryIt) tryIt.hidden = true; return; }
   const email = document.getElementById("login-email"), pass = document.getElementById("login-pass");
   if (!email.value) email.value = "demo@k9x.ai";
   if (!pass.value) pass.value = "demo";
-  document.getElementById("about-link").hidden = false;
+  if (HIL_PROFILE === "public") document.getElementById("about-link").hidden = false;
 }).catch(() => {});
+
+function applyBranding(b) {
+  if (b.name) {
+    document.title = b.name;
+    document.querySelectorAll(".brand-text, .login-brand").forEach(el => {
+      el.innerHTML = `<strong>${esc(b.name)}</strong>`;
+    });
+  }
+  if (b.logo_text) document.querySelectorAll(".brand-icon").forEach(el => {
+    el.textContent = b.logo_text; el.style.fontSize = "13px"; el.style.fontWeight = "800";
+  });
+  if (b.subtitle) document.querySelectorAll(".login-subtitle").forEach(el => { el.textContent = b.subtitle; });
+  if (b.accent) {
+    // On body so it wins in both themes; hover and the soft tint follow the accent.
+    document.body.style.setProperty("--accent", b.accent);
+    document.body.style.setProperty("--accent-hover", b.accent);
+    document.body.style.setProperty("--accent-dim", b.accent + "26");
+  }
+  const about = document.getElementById("instance-about");
+  if (about && b.about) { about.textContent = b.about; about.hidden = false; }
+}
 
 function renderAdminLanding() {
   const cards = [

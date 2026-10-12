@@ -61,6 +61,11 @@
   .btn-primary:hover { background: var(--hil-d); }
   .btn-ghost { color: var(--text); border-color: var(--border); background: transparent; }
   .btn-ghost:hover { border-color: var(--hil); color: var(--hil); }
+  .login { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; max-width: 600px; scroll-margin-top: 120px; }
+  .login input { flex: 1 1 170px; min-width: 0; background: rgba(19,31,53,.9); border: 1px solid var(--border); border-radius: 8px;
+                 color: var(--text); font: 14px var(--mono); padding: 12px 12px; }
+  .login input:focus { outline: none; border-color: var(--hil); }
+  .login-err { flex-basis: 100%; color: #fca5a5; font-size: 13px; min-height: 0; }
   .logins { font: 12.5px var(--mono); color: var(--muted); margin-top: 14px; max-width: 600px; }
   .logins b { color: var(--text); font-weight: 600; }
 
@@ -112,6 +117,16 @@
   .chip { font: 600 12px var(--mono); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--text); text-decoration: none; }
   .chip:hover { border-color: #f2b33d; color: #f2b33d; }
 
+  .brand-grid { display: grid; gap: 28px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .brand-list { list-style: none; margin: 0; padding: 0; }
+  .brand-list li { border-top: 1px solid var(--border); padding: 12px 0 12px 22px; position: relative; color: var(--muted); font-size: 14.5px; }
+  .brand-list li::before { content: ""; position: absolute; left: 0; top: 21px; width: 8px; height: 8px; background: var(--hil); transform: rotate(45deg); }
+  .brand-list b { color: var(--text); font-weight: 600; }
+  .brand-demo { display: grid; gap: 10px; }
+  .brand-tile { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--card); border-left: 4px solid var(--c); }
+  .brand-tile b { color: var(--c); font-family: var(--head); font-size: 16px; }
+  .brand-tile span { display: block; color: var(--muted); font-size: 13px; }
+  @media (max-width: 900px) { .brand-grid { grid-template-columns: 1fr; } }
   .limits { border-left: 3px solid var(--hil); background: var(--card); border-radius: 0 10px 10px 0; padding: 16px 20px; }
   .limits ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
   .limits li { margin: 4px 0; }
@@ -131,9 +146,10 @@
       <a href="#what">What it does</a>
       <a href="#how">How it works</a>
       <a href="#architecture">Architecture</a>
+      <a href="#per-project">Per project</a>
       <a href="#k9aif">K9-AIF</a>
       <a href="#scope">Scope</a>
-      <a class="signin" href="/app">Login</a>
+      <a class="signin" href="#login">Login</a>
     </nav>
   </div>
 </header>
@@ -147,9 +163,12 @@
       an escalated finding, a low-confidence result. Each request arrives over Kafka as a task in its
       application's queue; a reviewer approves, rejects or escalates it, and the decision goes back to
       the waiting workflow, which resumes exactly once.</p>
-    <div class="cta">
-      <a class="btn btn-primary" href="/app">Login</a>
-    </div>
+    <form class="login" id="login" onsubmit="return hilLogin(event)">
+      <input type="email" id="login-email" value="demo@k9x.ai" aria-label="Email" required>
+      <input type="password" id="login-pass" value="demo" aria-label="Password" required>
+      <button type="submit" class="btn btn-primary">Login</button>
+      <div class="login-err" id="login-err" role="alert"></div>
+    </form>
     <div class="logins">Demo login: <b>demo@k9x.ai</b> / <b>demo</b> · open public demonstration: you see and decide the live tasks from the K9X demos, such as DAS review gates. Shared login; do not enter real or personal information.</div>
   </div>
 </div>
@@ -211,6 +230,29 @@
       A separate HIL instance on the internal network receives K9X Sentinel's security findings for framework administrators.</p>
   </section>
 
+  <section id="per-project" class="numbered">
+    <h2>One HIL per project, in its own colours</h2>
+    <p class="sub">A project can run its own instance of K9X HIL, rebranded for it, beside this shared one. Its reviewers
+      sign in to a case-management app that carries the project's name and colours and shows only its own queues.</p>
+    <div class="brand-grid">
+      <ul class="brand-list">
+        <li><b>Its own branding.</b> Name, subtitle, accent colour, logo text and an about line, set in one instance
+          file; the instance's administrator can change them later.</li>
+        <li><b>Its own projects, applications and queues.</b> The same file lists them, down to each queue's Kafka topic
+          and deadline.</li>
+        <li><b>Its own data and identity.</b> A separate database schema, Kafka consumer group, sign-in secret and port,
+          so two instances never see each other's tasks.</li>
+        <li><b>The same software.</b> Every instance runs the same image as this one and is started with one command;
+          an upgrade reaches all of them.</li>
+      </ul>
+      <div class="brand-demo" aria-label="Example instances">
+        <div class="brand-tile" style="--c:#f0a46b"><b>K9X HIL</b><span>this shared instance: every K9X demonstration's queues</span></div>
+        <div class="brand-tile" style="--c:#d97706"><b>K9X HIL · DAS</b><span>a DAS instance: one queue per acquisition gate, from Service validation to the SRR</span></div>
+        <div class="brand-tile" style="--c:#38bdf8"><b>Your project</b><span>your name, colours and queues; the same Kafka round trip</span></div>
+      </div>
+    </div>
+  </section>
+
   <section id="k9aif">
     <div class="built-on">
       <h2>Built on the K9-AIF framework</h2>
@@ -219,7 +261,7 @@
       <p>The <b>K9X ecosystem</b> brings the framework to life with core components, including <b class="p-hil">K9X HIL</b> (this application: the human decisions every K9-AIF workflow can pause for), <b class="p-sentinel">K9X Sentinel</b> (above) and <b class="p-satan">K9X Satan</b> (an adversarial harness that fires attacks at a pipeline to prove its defences hold).</p>
       <div class="chips">
         <a class="chip" href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai ↗</a>
-        <a class="chip p-hil" href="/app">K9X HIL: login</a>
+        <a class="chip p-hil" href="#login">K9X HIL: login</a>
         <a class="chip p-sentinel" href="https://sentinel.k9x.ai" target="_blank" rel="noopener">K9X Sentinel ↗</a>
         <a class="chip p-satan" href="https://satan.k9x.ai" target="_blank" rel="noopener">K9X Satan ↗</a>
         <a class="chip" href="https://github.com/k9aif/k9-aif-framework" target="_blank" rel="noopener">Framework source ↗</a>
@@ -246,6 +288,28 @@
     <span><a href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai</a> · Apache 2.0</span>
   </div>
 </footer>
+
+<script>
+  // The landing page is the public instance's sign-in page: the same login the app used,
+  // then on to the app. A visitor who is already signed in goes straight there.
+  if (localStorage.getItem("k9x_hil_token")) location.replace("/app");
+  function hilLogin(e) {
+    e.preventDefault();
+    const err = document.getElementById("login-err");
+    err.textContent = "";
+    fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: document.getElementById("login-email").value,
+                             password: document.getElementById("login-pass").value }) })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(u => {
+        localStorage.setItem("k9x_hil_user", JSON.stringify(u));
+        localStorage.setItem("k9x_hil_token", u.token);
+        location.href = "/app";
+      })
+      .catch(() => { err.textContent = "Invalid email or password"; });
+    return false;
+  }
+</script>
 
 </body>
 </html>
