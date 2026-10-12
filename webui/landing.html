@@ -4,15 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>K9X HIL — Human-in-the-Loop Case Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* Same section order as das.k9x.ai (K9X landing standard); HIL's own palette:
-     orange, its product colour across the ecosystem, on navy. */
+  /* Same section order as das.k9x.ai (K9X landing standard), but HIL's own look: orange
+     (its product colour across the ecosystem) on navy, Space Grotesk headings, a hero image,
+     feature rows instead of a card grid, and a timeline for how it works. */
   :root {
     --bg: #0b1120; --bg2: #101a2c; --card: #131f35; --border: #233250;
     --text: #d6dde8; --muted: #a9b4c6; --hil: #f0a46b; --hil-d: #e08a4a;
     --teal: #5fd4c3; --blue: #60a5fa; --red: #e5534b;
     --mono: ui-monospace, Menlo, Consolas, monospace;
+    --head: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
+  h1, h2, h3, .logo { font-family: var(--head); }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -30,12 +35,23 @@
   header.top nav a.signin { color: #1c1208; background: var(--hil); border-radius: 6px; padding: 5px 12px; font-weight: 700; }
   section[id] { scroll-margin-top: 64px; }
 
-  .hero-band { background: radial-gradient(1200px 420px at 15% -10%, rgba(240,164,107,0.16), transparent 60%),
+  .hero-band { position: relative; overflow: hidden;
+               background: radial-gradient(1200px 420px at 15% -10%, rgba(240,164,107,0.16), transparent 60%),
                            linear-gradient(180deg, #0e1729 0%, var(--bg) 100%);
                border-bottom: 1px solid var(--border); }
-  .hero { padding-block: 64px 46px; }
+  /* The person at the door (the human checkpoint) and the released events, faded in from the
+     left so the hero text stays readable. */
+  .hero-art { position: absolute; top: 0; right: 0; bottom: 0; width: 58%;
+              background: url("/static/landing-hero.jpg") center / cover no-repeat; opacity: .9;
+              -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 38%);
+                      mask-image: linear-gradient(to right, transparent 0%, #000 38%); pointer-events: none; }
+  .hero-band .hero { position: relative; }
+  @media (max-width: 900px) { .hero-art { width: 100%; opacity: .18; } }
+  .hero { padding-block: 92px 84px; min-height: 560px; }
+  .hero h1 { max-width: 640px; }
+  .hero .lede { max-width: 600px; }
   .eyebrow { font: 700 12px var(--mono); color: var(--teal); letter-spacing: .08em; text-transform: uppercase; }
-  h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.12; margin: 10px 0 14px; letter-spacing: -.8px; }
+  h1 { font-size: clamp(32px, 4.8vw, 52px); line-height: 1.08; margin: 12px 0 18px; letter-spacing: -1px; font-weight: 700; }
   h1 em { font-style: normal; color: var(--hil); }
   .lede { font-size: 17px; color: var(--muted); max-width: 760px; margin: 0 0 26px; }
   .cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
@@ -48,16 +64,25 @@
   .logins { font: 12.5px var(--mono); color: var(--muted); margin-top: 14px; }
   .logins b { color: var(--text); font-weight: 600; }
 
-  section { padding: 30px 0; }
-  h2 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.3px; }
+  main { counter-reset: sec; }
+  section { padding: 44px 0; }
+  h2 { font-size: 26px; margin: 0 0 6px; letter-spacing: -.4px; font-weight: 700; }
+  section.numbered > h2::before { counter-increment: sec; content: "0" counter(sec) " / ";
+      font: 600 13px var(--mono); color: var(--hil); vertical-align: middle; margin-right: 6px; letter-spacing: .04em; }
   .sub { color: var(--muted); margin: 0 0 20px; max-width: 780px; }
-  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 18px 16px; }
-  .card h3 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
-  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .grid { display: grid; gap: 0 48px; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+  .card { border-top: 1px solid var(--border); padding: 18px 0 18px 22px; position: relative; }
+  .card::before { content: ""; position: absolute; left: 0; top: 26px; width: 8px; height: 8px; background: var(--hil); transform: rotate(45deg); }
+  .card h3 { margin: 0 0 4px; font-size: 17px; color: var(--text); font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
 
-  .loop { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .loop .step { background: var(--card); border: 1px solid var(--border); border-top: 3px solid var(--hil); border-radius: 10px; padding: 14px 14px 12px; }
+  .loop { display: grid; gap: 22px; grid-template-columns: repeat(5, 1fr); position: relative; margin-top: 10px; }
+  .loop::before { content: ""; position: absolute; left: 7px; right: 7px; top: 7px; height: 2px;
+                  background: linear-gradient(90deg, #4f7bd8, var(--hil)); }
+  .loop .step { position: relative; padding-top: 30px; }
+  .loop .step::before { content: ""; position: absolute; left: 0; top: 0; width: 16px; height: 16px; border-radius: 50%;
+                        background: var(--bg); border: 3px solid var(--hil); }
+  @media (max-width: 900px) { .loop { grid-template-columns: 1fr; } .loop::before { display: none; } }
   .loop .step i { font-style: normal; font: 800 11px var(--mono); color: var(--hil); }
   .loop .step b { display: block; color: var(--text); margin-bottom: 4px; }
   .loop .step span { color: var(--muted); font-size: 13.5px; }
@@ -108,22 +133,22 @@
       <a href="#architecture">Architecture</a>
       <a href="#k9aif">K9-AIF</a>
       <a href="#scope">Scope</a>
-      <a class="signin" href="/app">Sign in</a>
+      <a class="signin" href="/app">Login</a>
     </nav>
   </div>
 </header>
 
 <div class="hero-band">
+  <div class="hero-art" aria-hidden="true"></div>
   <div class="wrap hero">
     <div class="eyebrow">Human-in-the-loop case management</div>
-    <h1>When an agent needs a person,<br>the decision is <em>made here</em>.</h1>
+    <h1>When an agent needs a person, the decision is <em>made here</em>.</h1>
     <p class="lede">K9X HIL is where AI applications built on K9-AIF hand a decision to a human: a review gate,
       an escalated finding, a low-confidence result. Each request arrives over Kafka as a task in its
       application's queue; a reviewer approves, rejects or escalates it, and the decision goes back to
       the waiting workflow, which resumes exactly once.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="/app?demo=1">Try the demo →</a>
-      <a class="btn btn-ghost" href="/app">Sign in</a>
+      <a class="btn btn-primary" href="/app">Login</a>
     </div>
     <div class="logins">Demo login: <b>demo@k9x.ai</b> / <b>demo</b> · open public demonstration with sample data; do not enter real information.</div>
   </div>
@@ -131,7 +156,7 @@
 
 <main class="wrap">
 
-  <section id="what">
+  <section class="numbered" id="what">
     <h2>What it does</h2>
     <p class="sub">One place for every decision a person has to make in an agentic workflow, organised the way the
       workflows are: projects, their applications, and each application's queues.</p>
@@ -154,7 +179,7 @@
     </div>
   </section>
 
-  <section id="how">
+  <section class="numbered" id="how">
     <h2>How it works</h2>
     <p class="sub">A K9-AIF workflow pauses for a person without blocking, and picks up where it left off when the decision arrives.</p>
     <div class="loop">
@@ -166,7 +191,7 @@
     </div>
   </section>
 
-  <section id="architecture">
+  <section class="numbered" id="architecture">
     <h2>Architecture</h2>
     <p class="sub">HIL sits beside the applications, connected only by Kafka topics.</p>
     <div class="flow">
@@ -194,7 +219,7 @@
       <p>The <b>K9X ecosystem</b> brings the framework to life with core components, including <b class="p-hil">K9X HIL</b> (this application: the human decisions every K9-AIF workflow can pause for), <b class="p-sentinel">K9X Sentinel</b> (above) and <b class="p-satan">K9X Satan</b> (an adversarial harness that fires attacks at a pipeline to prove its defences hold).</p>
       <div class="chips">
         <a class="chip" href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai ↗</a>
-        <a class="chip p-hil" href="/app">K9X HIL: sign in</a>
+        <a class="chip p-hil" href="/app">K9X HIL: login</a>
         <a class="chip p-sentinel" href="https://sentinel.k9x.ai" target="_blank" rel="noopener">K9X Sentinel ↗</a>
         <a class="chip p-satan" href="https://satan.k9x.ai" target="_blank" rel="noopener">K9X Satan ↗</a>
         <a class="chip" href="https://github.com/k9aif/k9-aif-framework" target="_blank" rel="noopener">Framework source ↗</a>

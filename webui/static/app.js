@@ -790,20 +790,14 @@ fetch("/api/meta").then(r => r.json()).then(m => {
     el.hidden = !m.badge;
   });
   if (m.badge) document.title = `${document.title} · ${m.badge}`;
-  // Public instance: the sign-in form defaults to the shared demo login, links back to
-  // the landing page, and /app?demo=1 ("Try the demo") signs in as demo straight away.
-  // Internal and dedicated instances show no demo login.
+  // Public instance: the sign-in form defaults to the shared demo login and links back to
+  // the landing page. Internal and dedicated instances show no demo login.
   const tryIt = document.getElementById("try-it");
   if (HIL_PROFILE !== "public") { if (tryIt) tryIt.hidden = true; return; }
   const email = document.getElementById("login-email"), pass = document.getElementById("login-pass");
   if (!email.value) email.value = "demo@k9x.ai";
   if (!pass.value) pass.value = "demo";
   document.getElementById("about-link").hidden = false;
-  const params = new URLSearchParams(location.search);
-  if (params.get("demo") === "1") {
-    history.replaceState(null, "", location.pathname);
-    if (!currentUser) doLogin(new Event("submit"));
-  }
 }).catch(() => {});
 
 function renderAdminLanding() {
