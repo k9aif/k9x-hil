@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K9X HIL — Human-in-the-Loop Case Management</title>
+<style>
+  /* Same section order as das.k9x.ai (K9X landing standard); HIL's own palette:
+     orange, its product colour across the ecosystem, on navy. */
+  :root {
+    --bg: #0b1120; --bg2: #101a2c; --card: #131f35; --border: #233250;
+    --text: #d6dde8; --muted: #a9b4c6; --hil: #f0a46b; --hil-d: #e08a4a;
+    --teal: #5fd4c3; --blue: #60a5fa; --red: #e5534b;
+    --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  a { color: var(--hil); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 22px; }
+  header.top { border-bottom: 1px solid var(--border); background: rgba(16,26,44,0.94); position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px); }
+  header.top .wrap { display: flex; align-items: center; gap: 14px; padding-block: 12px; flex-wrap: wrap; }
+  .logo { font-weight: 800; letter-spacing: -.3px; font-size: 18px; color: var(--text); text-decoration: none; }
+  .logo span { color: var(--hil); }
+  .beta { font: 700 10.5px var(--mono); color: var(--hil); border: 1px solid var(--hil); border-radius: 4px; padding: 2px 6px; }
+  header.top nav { margin-left: auto; display: flex; gap: 16px; font-size: 13px; align-items: center; flex-wrap: wrap; }
+  header.top nav a { color: var(--muted); text-decoration: none; }
+  header.top nav a:hover { color: var(--text); }
+  header.top nav a.signin { color: #1c1208; background: var(--hil); border-radius: 6px; padding: 5px 12px; font-weight: 700; }
+  section[id] { scroll-margin-top: 64px; }
+
+  .hero-band { background: radial-gradient(1200px 420px at 15% -10%, rgba(240,164,107,0.16), transparent 60%),
+                           linear-gradient(180deg, #0e1729 0%, var(--bg) 100%);
+               border-bottom: 1px solid var(--border); }
+  .hero { padding-block: 64px 46px; }
+  .eyebrow { font: 700 12px var(--mono); color: var(--teal); letter-spacing: .08em; text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.12; margin: 10px 0 14px; letter-spacing: -.8px; }
+  h1 em { font-style: normal; color: var(--hil); }
+  .lede { font-size: 17px; color: var(--muted); max-width: 760px; margin: 0 0 26px; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 8px; padding: 12px 22px;
+         font-weight: 700; font-size: 15px; cursor: pointer; border: 1px solid transparent; text-decoration: none; }
+  .btn-primary { background: var(--hil); color: #1c1208; }
+  .btn-primary:hover { background: var(--hil-d); }
+  .btn-ghost { color: var(--text); border-color: var(--border); background: transparent; }
+  .btn-ghost:hover { border-color: var(--hil); color: var(--hil); }
+  .logins { font: 12.5px var(--mono); color: var(--muted); margin-top: 14px; }
+  .logins b { color: var(--text); font-weight: 600; }
+
+  section { padding: 30px 0; }
+  h2 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.3px; }
+  .sub { color: var(--muted); margin: 0 0 20px; max-width: 780px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 18px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .loop { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .loop .step { background: var(--card); border: 1px solid var(--border); border-top: 3px solid var(--hil); border-radius: 10px; padding: 14px 14px 12px; }
+  .loop .step i { font-style: normal; font: 800 11px var(--mono); color: var(--hil); }
+  .loop .step b { display: block; color: var(--text); margin-bottom: 4px; }
+  .loop .step span { color: var(--muted); font-size: 13.5px; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .flow .box { flex: 1 1 150px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .flow .box b { display: block; font-size: 14px; color: var(--text); }
+  .flow .box span { font-size: 12.5px; color: var(--muted); }
+  .flow .box.hil { border-color: rgba(240,164,107,0.55); background: linear-gradient(160deg, rgba(240,164,107,0.10), var(--card)); }
+  .flow .box.hil b { color: var(--hil); }
+  .flow .arrow { align-self: center; color: var(--muted); font: 700 13px var(--mono); }
+  code { font-family: var(--mono); font-size: 12.5px; color: var(--hil); }
+  .caption { color: var(--muted); font-size: 13.5px; margin-top: 12px; max-width: 900px; }
+
+  .built-on { border: 1px solid rgba(242,179,61,0.28); border-radius: 12px; padding: 22px 24px;
+              background: linear-gradient(160deg, rgba(242,179,61,0.07), rgba(20,32,58,0.6)); }
+  .built-on h2 { color: #f2b33d; }
+  .built-on p { color: var(--muted); margin: 12px 0 0; max-width: 760px; }
+  .built-on b { color: #c9d1de; font-weight: 600; }
+  .built-on .keyline { border-left: 2px solid rgba(242,179,61,0.45); padding-left: 12px; }
+  .built-on .keyline b { color: #e9c77a; }
+  .built-on .keyline b.plain { color: #c9d1de; }
+  .built-on b.p-hil, .chip.p-hil { color: #f0a46b; }
+  .built-on b.p-sentinel, .chip.p-sentinel { color: #5fd4c3; }
+  .built-on b.p-satan, .chip.p-satan { color: #e5534b; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { font: 600 12px var(--mono); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--text); text-decoration: none; }
+  .chip:hover { border-color: #f2b33d; color: #f2b33d; }
+
+  .limits { border-left: 3px solid var(--hil); background: var(--card); border-radius: 0 10px 10px 0; padding: 16px 20px; }
+  .limits ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+  .limits li { margin: 4px 0; }
+
+  footer { border-top: 1px solid var(--border); margin-top: 26px; padding: 22px 0 34px; color: var(--muted); font-size: 13px; }
+  footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; }
+  @media (max-width: 640px) { header.top nav a:not(.signin) { display: none; } .flow .arrow { display: none; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="/"><span>K9X</span> HIL</a>
+    <span class="beta">BETA</span>
+    <nav>
+      <a href="#what">What it does</a>
+      <a href="#how">How it works</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#k9aif">K9-AIF</a>
+      <a href="#scope">Scope</a>
+      <a class="signin" href="/app">Sign in</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+  <div class="wrap hero">
+    <div class="eyebrow">Human-in-the-loop case management</div>
+    <h1>When an agent needs a person,<br>the decision is <em>made here</em>.</h1>
+    <p class="lede">K9X HIL is where AI applications built on K9-AIF hand a decision to a human: a review gate,
+      an escalated finding, a low-confidence result. Each request arrives over Kafka as a task in its
+      application's queue; a reviewer approves, rejects or escalates it, and the decision goes back to
+      the waiting workflow, which resumes exactly once.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="/app?demo=1">Try the demo →</a>
+      <a class="btn btn-ghost" href="/app">Sign in</a>
+    </div>
+    <div class="logins">Demo login: <b>demo@k9x.ai</b> / <b>demo</b> · open public demonstration with sample data; do not enter real information.</div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <section id="what">
+    <h2>What it does</h2>
+    <p class="sub">One place for every decision a person has to make in an agentic workflow, organised the way the
+      workflows are: projects, their applications, and each application's queues.</p>
+    <div class="grid">
+      <div class="card"><h3>Kafka-native queues</h3><p>Each queue is a Kafka topic. An application publishes a task to
+        its queue and listens on its reply topic; nothing calls HIL over HTTP, and HIL never calls back into the application.</p></div>
+      <div class="card"><h3>Projects → Applications → Tasks</h3><p>Pick a project, then an application, and see its tasks
+        by status: Pending, In progress, Escalated, Completed, Critical. Sort any column, filter by queue, or find a job by its ID.</p></div>
+      <div class="card"><h3>Decisions go back, once</h3><p>Only a final decision (complete, reject, expire) is published to the
+        task's reply topic with its correlation ID. A compare-and-swap on the task and a reply outbox make sure the
+        waiting flow resumes once, even if a message is delivered twice.</p></div>
+      <div class="card"><h3>Deadlines</h3><p>A task can carry a time limit and what to do when it runs out. A sweep expires
+        overdue tasks and sends that outcome back, so a workflow is never left waiting forever.</p></div>
+      <div class="card"><h3>The evidence, in the task</h3><p>The agent's rationale and payload are shown as readable
+        details, and attached documents (object-storage links) open in the task, so the reviewer decides with the
+        material in front of them.</p></div>
+      <div class="card"><h3>Roles and audit</h3><p>Admin, manager and assignee roles decide who may act. Every action
+        (claim, start, complete, reject, escalate) is recorded with who and when. Malformed messages go to a
+        dead-letter topic instead of being dropped.</p></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="sub">A K9-AIF workflow pauses for a person without blocking, and picks up where it left off when the decision arrives.</p>
+    <div class="loop">
+      <div class="step"><i>1 · RAISE</i><b>An agent asks for a person</b><span>An agent or squad raises <code>RequiresHIL</code>; the orchestrator publishes the request to <code>hil.requests.&lt;queue&gt;</code> and returns "pending".</span></div>
+      <div class="step"><i>2 · QUEUE</i><b>A task appears</b><span>HIL consumes the message and files a task in the application's queue, with priority, deadline and the agent's evidence.</span></div>
+      <div class="step"><i>3 · DECIDE</i><b>A reviewer acts</b><span>Claim, start, then complete, reject or escalate, with a comment. Escalation keeps the task open for someone else.</span></div>
+      <div class="step"><i>4 · REPLY</i><b>The decision is published</b><span>The final decision goes to the task's reply topic with its correlation ID; the outbox retries until it is delivered.</span></div>
+      <div class="step"><i>5 · RESUME</i><b>The workflow continues</b><span>The K9-AIF router matches the correlation ID to the paused flow and resumes it once, with the decision in hand.</span></div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>Architecture</h2>
+    <p class="sub">HIL sits beside the applications, connected only by Kafka topics.</p>
+    <div class="flow">
+      <div class="box"><b>Orchestrator</b><span>catches <code>RequiresHIL</code>, records the paused flow</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>Kafka</b><span><code>hil.requests.&lt;queue&gt;</code></span></div>
+      <div class="arrow">→</div>
+      <div class="box hil"><b>K9X HIL</b><span>consumer · tasks in PostgreSQL · web UI · deadline sweep · reply outbox</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>Kafka</b><span><code>hil.replies.*</code> (the task's reply topic)</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>K9-AIF Router</b><span>resumes the flow once, by correlation ID</span></div>
+    </div>
+    <p class="caption">The queues in this demonstration belong to the K9X example applications, among them
+      <a href="https://das.k9x.ai" target="_blank" rel="noopener">K9X DAS</a> (its acquisition review gates) and
+      <a href="https://continuum.k9x.ai" target="_blank" rel="noopener">K9X Continuum</a> (building-block promotion reviews).
+      A separate HIL instance on the internal network receives K9X Sentinel's security findings for framework administrators.</p>
+  </section>
+
+  <section id="k9aif">
+    <div class="built-on">
+      <h2>Built on the K9-AIF framework</h2>
+      <p><b>K9-AIF (Agentic Integration Framework)</b> is an architecture-first framework for building governed, secure, and enterprise-scale AI applications. Built on OOA/OOD principles and TOGAF-aligned, it brings consistency, governance, and auditability to agentic systems from day one. Every Router, Orchestrator, Squad and Agent in an application built on K9-AIF extends a K9-AIF Architecture Building Block, so governance, human review and auditability are inherited, not hand-built per application.</p>
+      <p class="keyline"><b>Security checks that keep pace with new attacks.</b> AI is now used to attack applications that are themselves built with AI: instructions hidden in documents, agents impersonating other agents, poisoned tool results. K9-AIF tracks these attack techniques as they are published, for example in the OWASP Top 10 for LLM Applications, and adds matching checks to the framework's governance pipeline. Solutions built on K9-AIF pick up the new checks with a framework upgrade, without rewriting their own agents. That is why <b class="plain">K9X Sentinel</b> was introduced: every day it reads newly published attacks and checks each one against the framework's security capabilities, so gaps are found and closed early.</p>
+      <p>The <b>K9X ecosystem</b> brings the framework to life with core components, including <b class="p-hil">K9X HIL</b> (this application: the human decisions every K9-AIF workflow can pause for), <b class="p-sentinel">K9X Sentinel</b> (above) and <b class="p-satan">K9X Satan</b> (an adversarial harness that fires attacks at a pipeline to prove its defences hold).</p>
+      <div class="chips">
+        <a class="chip" href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai ↗</a>
+        <a class="chip p-hil" href="/app">K9X HIL: sign in</a>
+        <a class="chip p-sentinel" href="https://sentinel.k9x.ai" target="_blank" rel="noopener">K9X Sentinel ↗</a>
+        <a class="chip p-satan" href="https://satan.k9x.ai" target="_blank" rel="noopener">K9X Satan ↗</a>
+        <a class="chip" href="https://github.com/k9aif/k9-aif-framework" target="_blank" rel="noopener">Framework source ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="scope">
+    <div class="limits">
+      <h2 style="margin-bottom:4px">Scope of this demonstration</h2>
+      <ul>
+        <li>This is an open public demonstration with <b>sample data</b>. The demo login is shared; do not enter real or personal information.</li>
+        <li>The demo user is a manager and can act on tasks. Decisions on the example applications' queues may resume those demonstration workflows.</li>
+        <li>K9X HIL is in <b>Beta</b>: the case-management model and the Kafka round trip are built; integrations such as ticketing are optional and not configured here.</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>K9X HIL · part of the K9X ecosystem, built on the K9-AIF framework</span>
+    <span><a href="https://k9x.ai" target="_blank" rel="noopener">k9x.ai</a> · Apache 2.0</span>
+  </div>
+</footer>
+
+</body>
+</html>

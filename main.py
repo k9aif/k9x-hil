@@ -25,6 +25,7 @@ _ROOT   = Path(__file__).resolve().parent
 _WEBUI  = _ROOT / "webui"
 _STATIC = _WEBUI / "static"
 _INDEX  = _WEBUI / "index.html"
+_LANDING = _WEBUI / "landing.html"
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -89,6 +90,15 @@ def meta():
         out["demo_login"] = bool(cfg.get("demo_login"))
         out["jobs_view"] = bool((cfg.get("jobs") or {}).get("stages"))
     return out
+
+
+@app.get("/")
+def landing():
+    """The public instance opens on its landing page (sign-in at /app); the internal and
+    dedicated instances go straight to sign-in."""
+    if PROFILE == "public" and _LANDING.exists():
+        return FileResponse(str(_LANDING), headers={"Cache-Control": "no-cache"})
+    return serve_ui("")
 
 
 @app.get("/{full_path:path}")
