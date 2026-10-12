@@ -41,10 +41,10 @@
                border-bottom: 1px solid var(--border); }
   /* The person at the door (the human checkpoint) and the released events, faded in from the
      left so the hero text stays readable. */
-  .hero-art { position: absolute; top: 0; right: 0; bottom: 0; width: 58%;
-              background: url("/static/landing-hero.jpg") center / cover no-repeat; opacity: .9;
-              -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 38%);
-                      mask-image: linear-gradient(to right, transparent 0%, #000 38%); pointer-events: none; }
+  .hero-art { position: absolute; top: 0; right: 0; bottom: 0; width: 42%;
+              background: url("/static/landing-hero.jpg") right center / cover no-repeat; opacity: .9;
+              -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 22%);
+                      mask-image: linear-gradient(to right, transparent 0%, #000 22%); pointer-events: none; }
   .hero-band .hero { position: relative; }
   @media (max-width: 900px) { .hero-art { width: 100%; opacity: .18; } }
   .hero { padding-block: 92px 84px; min-height: 560px; }
@@ -61,7 +61,7 @@
   .btn-primary:hover { background: var(--hil-d); }
   .btn-ghost { color: var(--text); border-color: var(--border); background: transparent; }
   .btn-ghost:hover { border-color: var(--hil); color: var(--hil); }
-  .logins { font: 12.5px var(--mono); color: var(--muted); margin-top: 14px; }
+  .logins { font: 12.5px var(--mono); color: var(--muted); margin-top: 14px; max-width: 600px; }
   .logins b { color: var(--text); font-weight: 600; }
 
   main { counter-reset: sec; }
