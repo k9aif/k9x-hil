@@ -464,28 +464,9 @@ def seed_internal():
                          topic="hil.requests.framework_security_updates",
                          ttl_hours=336, ttl_action="expire"))
         db.commit()
-        # ── K9X Newswatch ────────────────────────────────────────────
-        # K9X Newswatch (k9aif/k9x-newswatch) sends every analysed vendor announcement here: nothing is
-        # published on newswatch.k9x.ai until an editor approves it. Approve = publish on Today's page;
-        # reject = never published.
-        if not db.query(Application).filter(Application.name == "K9X Newswatch",
-                                            Application.project_id == k9_proj.id).first():
-            db.add(Application(project_id=k9_proj.id, name="K9X Newswatch",
-                               description="Vendor-neutral AI governance briefing: every item approved before publication"))
-        db.commit()
-        news_app = db.query(Application).filter(Application.name == "K9X Newswatch",
-                                                Application.project_id == k9_proj.id).first()
-        if not db.query(Queue).filter(Queue.topic == "hil.requests.newswatch_editorial").first():
-            db.add(Queue(application_id=news_app.id, name="Newswatch editorial",
-                         description="An analysed vendor announcement. Approve = publish on newswatch.k9x.ai "
-                                     "(Today's page, then the daily issue); reject = never published.",
-                         topic="hil.requests.newswatch_editorial",
-                         ttl_hours=168, ttl_action="expire"))
-        db.commit()
         admin = db.query(User).filter(User.email == email).first()
-        for app_ in (sec_app, news_app):
-            if admin and app_ not in admin.applications:
-                admin.applications.append(app_)
+        if admin and sec_app not in admin.applications:
+            admin.applications.append(sec_app)
         db.commit()
         log.info("[seed] internal profile: admin %s, %d queues", email, db.query(Queue).count())
     finally:
