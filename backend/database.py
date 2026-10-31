@@ -63,4 +63,5 @@ def ensure_columns():
         conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS required_role VARCHAR(20)"))
         conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS decision_authority VARCHAR(255)"))
         conn.execute(text(f"ALTER TABLE {SCHEMA}.queues ADD COLUMN IF NOT EXISTS required_role VARCHAR(20)"))
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS require_comment BOOLEAN DEFAULT FALSE"))
         conn.commit()

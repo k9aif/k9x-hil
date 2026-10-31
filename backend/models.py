@@ -105,6 +105,7 @@ class Task(Base):
     ttl_action           = Column(String(20))
     required_role        = Column(String(20))     # minimum HIL role allowed to decide (1.3.0)
     decision_authority   = Column(String(255))    # who decides, as the producer names it (1.3.0)
+    require_comment      = Column(Boolean, default=False)  # approval needs a written justification (1.4.0)
     due_date             = Column(DateTime)
     created_at           = Column(DateTime, server_default=func.now())
     updated_at           = Column(DateTime, server_default=func.now(), onupdate=func.now())

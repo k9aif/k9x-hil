@@ -28,6 +28,18 @@ def required_role(task) -> Optional[str]:
     return role
 
 
+class JustificationRequired(Exception):
+    """The task asks for a written justification and the approval has none (1.4.0)."""
+
+
+def check_justification(task, action: str, comment) -> None:
+    """A producer may mark a task ``require_comment`` (e.g. the Continuum, for an SBB whose
+    re-run inspection has findings): approving it then needs a non-empty comment."""
+    if action == "complete" and getattr(task, "require_comment", False) and not str(comment or "").strip():
+        raise JustificationRequired(
+            f"Task {task.id} needs a written justification to approve: add it as the comment")
+
+
 def check_may_decide(user, task, action: str) -> None:
     """Raise DecisionNotAuthorized when ``user`` may not take ``action`` on ``task``."""
     if action not in DECISION_ACTIONS:

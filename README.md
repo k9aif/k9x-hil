@@ -51,4 +51,8 @@ rejecting needs that role or above, otherwise `403`; claiming and starting need 
 The decider recorded with the decision, and sent in the reply (`actor`, `actor_role`,
 `decision_authority`), is the signed-in user, never a name sent by the client.
 
+**Justification required (1.4.0).** A producer may mark a task `require_comment: true` (the
+K9X Continuum does, for an SBB whose re-run inspection has findings or could not be verified).
+Approving it then needs a non-empty comment, otherwise `422`; the comment travels in the reply.
+
 Tests: `pytest -q tests`.

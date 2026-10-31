@@ -658,6 +658,8 @@ function taskDetailHtml(t) {
       <div class="modal-kv">
         <span class="modal-kv-label">Application</span>
         <span class="modal-kv-value">${esc(t.application_name || "—")}</span>
+        ${t.require_comment ? `<span class="modal-kv-label">Approval</span>
+        <span class="modal-kv-value">needs a written justification in the comment</span>` : ''}
         ${t.required_role ? `<span class="modal-kv-label">Decided by</span>
         <span class="modal-kv-value">${esc(t.decision_authority || "")}${t.decision_authority ? " — " : ""}role ${esc(t.required_role)} or above</span>` : ''}
         <span class="modal-kv-label">Queue</span>

@@ -132,9 +132,48 @@ def test_consumer_takes_required_role_from_message_then_queue():
     check("message overrides queue", t2.required_role == "admin", t2.required_role)
 
 
+def test_approval_of_a_task_requiring_a_justification_needs_a_comment():
+    """1.4.0: a producer marks a task require_comment; approve without a comment -> 422, nothing changes;
+    with a comment it is approved and the comment travels in the reply. Reject needs none."""
+    db = _session()
+    _, manager = _users(db)
+    t = _task(db, "manager")
+    t.require_comment = True
+    db.commit()
+    with patch("backend.task_actions.attempt_publish", lambda db, row: True):
+        r = _post(db, manager, t.id, {"action": "complete", "comment": "  "})
+        check("approve without justification -> 422", r.status_code == 422, r.text)
+        db.refresh(t)
+        check("refused approval changes nothing", t.status == "pending", t.status)
+        r = _post(db, manager, t.id, {"action": "complete", "comment": "Two warnings, both in test fixtures."})
+        check("approve with justification", r.status_code == 200, r.text)
+    reply = db.query(HilReplyOutbox).one().event
+    check("justification is in the reply", reply["comment"] == "Two warnings, both in test fixtures.", str(reply))
+    t2 = _task(db, None); t2.require_comment = True; db.commit()
+    with patch("backend.task_actions.attempt_publish", lambda db, row: True):
+        r = _post(db, manager, t2.id, {"action": "reject"})
+    check("reject needs no justification", r.status_code == 200, r.text)
+
+
+def test_consumer_takes_require_comment_from_the_message():
+    from backend import kafka_consumer
+    db = _session()
+    p = Project(name="P"); db.add(p); db.commit()
+    a = Application(project_id=p.id, name="Continuum"); db.add(a); db.commit()
+    q = Queue(application_id=a.id, name="SBB review", topic="workflow.hil.k9platform.architecture.sbb-promotion")
+    db.add(q); db.commit()
+    with patch.object(kafka_consumer, "SessionLocal", lambda: db), patch.object(db, "close", lambda: None):
+        kafka_consumer._ingest_message(q.topic, {"title": "SBB-7", "correlation_id": "SBB-7-review", "require_comment": True})
+        kafka_consumer._ingest_message(q.topic, {"title": "SBB-8", "correlation_id": "SBB-8-review"})
+    check("require_comment stored", db.query(Task).filter(Task.correlation_id == "SBB-7-review").one().require_comment is True)
+    check("default is no requirement", not db.query(Task).filter(Task.correlation_id == "SBB-8-review").one().require_comment)
+
+
 def main():
     for fn in (test_decision_needs_the_required_role, test_task_without_required_role_keeps_old_behaviour,
-               test_consumer_takes_required_role_from_message_then_queue):
+               test_consumer_takes_required_role_from_message_then_queue,
+               test_approval_of_a_task_requiring_a_justification_needs_a_comment,
+               test_consumer_takes_require_comment_from_the_message):
         print(fn.__name__)
         fn()
     if failures:

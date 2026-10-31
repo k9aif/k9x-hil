@@ -106,6 +106,7 @@ def _ingest_message(topic: str, message: dict) -> None:
             ttl_action=message.get("ttl_action", queue.ttl_action),
             required_role=message.get("required_role") or queue.required_role,
             decision_authority=message.get("decision_authority"),
+            require_comment=bool(message.get("require_comment", False)),
             due_date=due_date,
         )
         db.add(task)

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction, Branding
 from backend.auth import create_access_token, get_current_user, require_admin
-from backend.authorization import DecisionNotAuthorized, check_may_decide
+from backend.authorization import (DecisionNotAuthorized, JustificationRequired, check_justification,
+                                   check_may_decide)
 from backend.task_actions import apply_task_action, TaskConflictError
 
 router = APIRouter(prefix="/api")
@@ -194,10 +195,13 @@ def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_d
     # a decision needs the role the task requires.
     try:
         check_may_decide(user, t, req.action)
+        check_justification(t, req.action, req.comment)
         status = apply_task_action(db, t, req.action, user.email, req.comment, req.result,
                                    actor_role=user.role)
     except DecisionNotAuthorized as exc:
         raise HTTPException(403, str(exc))
+    except JustificationRequired as exc:
+        raise HTTPException(422, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except TaskConflictError as exc:
@@ -259,6 +263,7 @@ def _task_dict(t, db, queues=None):
             "pii": bool(t.pii), "pii_fields": t.pii_fields,
             "ttl_hours": t.ttl_hours, "ttl_action": t.ttl_action,
             "required_role": t.required_role, "decision_authority": t.decision_authority,
+            "require_comment": bool(t.require_comment),
             "due_date": _iso(t.due_date), "created_at": _iso(t.created_at),
             "updated_at": _iso(t.updated_at), "completed_at": _iso(t.completed_at)}
 
