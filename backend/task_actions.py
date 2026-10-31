@@ -37,7 +37,8 @@ class TaskConflictError(Exception):
 
 
 def apply_task_action(db, task: Task, action: str, actor: str,
-                       comment: Optional[str] = None, result: Optional[dict] = None) -> str:
+                       comment: Optional[str] = None, result: Optional[dict] = None,
+                       actor_role: Optional[str] = None) -> str:
     """Atomically transition `task` per `action`, record a TaskAction,
     and commit. Returns the resulting status.
 
@@ -130,6 +131,7 @@ def apply_task_action(db, task: Task, action: str, actor: str,
             db, task_id=task.id, reply_to=reply_to, correlation_id=correlation_id,
             action=action, actor=actor, status=updates["status"],
             comment=comment, result=result,
+            actor_role=actor_role, decision_authority=task.decision_authority,
         )
 
     db.commit()

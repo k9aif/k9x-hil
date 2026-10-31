@@ -64,12 +64,15 @@ def build_reply_event(
     status: str,
     comment: Optional[str] = None,
     result: Optional[Dict[str, Any]] = None,
+    actor_role: Optional[str] = None,
+    decision_authority: Optional[str] = None,
 ) -> Dict[str, Any]:
     """The wire schema K9EventRouter's reply-side consumes. Do not change
     without coordinating -- the ent-app-kit integration plan's decision
     mapping depends on this exact shape:
-    {correlation_id, action, actor, status, comment, result, decided_at}."""
-    return {
+    {correlation_id, action, actor, status, comment, result, decided_at}.
+    1.3.0 adds actor_role and decision_authority when known (additive)."""
+    event = {
         "correlation_id": correlation_id,
         "action": action,
         "actor": actor,
@@ -78,6 +81,11 @@ def build_reply_event(
         "result": result,
         "decided_at": datetime.now(timezone.utc).isoformat(),
     }
+    if actor_role:
+        event["actor_role"] = actor_role
+    if decision_authority:
+        event["decision_authority"] = decision_authority
+    return event
 
 
 def enqueue_hil_reply(
@@ -90,6 +98,8 @@ def enqueue_hil_reply(
     status: str,
     comment: Optional[str] = None,
     result: Optional[Dict[str, Any]] = None,
+    actor_role: Optional[str] = None,
+    decision_authority: Optional[str] = None,
 ) -> Optional[HilReplyOutbox]:
     """Write the outbox row for a terminal decision. Caller (apply_task_action)
     must add this to the same session/transaction as the Task status
@@ -108,7 +118,8 @@ def enqueue_hil_reply(
         )
         return None
 
-    event = build_reply_event(correlation_id, action, actor, status, comment, result)
+    event = build_reply_event(correlation_id, action, actor, status, comment, result,
+                              actor_role=actor_role, decision_authority=decision_authority)
     row = HilReplyOutbox(
         task_id=task_id, correlation_id=correlation_id, reply_to=reply_to,
         event=event, status="pending",

@@ -41,7 +41,14 @@ bash ubuntu_instance/build-run.sh all acme  # build the image, start container k
 
 `instances/<name>.yaml` is the instance: `branding` (name, subtitle, accent,
 logo_text, about), `demo_login`, and the projects → applications → queues with
-each queue's Kafka topic and deadline (`ttl_hours`, `ttl_action`). The instance's
+each queue's Kafka topic and deadline (`ttl_hours`, `ttl_action`), and optionally the
+minimum role that may decide its tasks (`required_role`: worker, manager or admin). The instance's
 admin can change the branding later through `PUT /api/branding`.
+
+**Who may decide (1.3.0).** A task message may name `required_role` (else the queue's)
+and `decision_authority` (a label, e.g. "Milestone Decision Authority"). Approving or
+rejecting needs that role or above, otherwise `403`; claiming and starting need none.
+The decider recorded with the decision, and sent in the reply (`actor`, `actor_role`,
+`decision_authority`), is the signed-in user, never a name sent by the client.
 
 Tests: `pytest -q tests`.

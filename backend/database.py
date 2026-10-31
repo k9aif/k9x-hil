@@ -60,4 +60,7 @@ def ensure_columns():
     # Must run after create_all() so the table is guaranteed to exist.
     with engine.connect() as conn:
         conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS jira_ticket VARCHAR(500)"))
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS required_role VARCHAR(20)"))
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.tasks ADD COLUMN IF NOT EXISTS decision_authority VARCHAR(255)"))
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.queues ADD COLUMN IF NOT EXISTS required_role VARCHAR(20)"))
         conn.commit()

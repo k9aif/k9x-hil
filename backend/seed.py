@@ -520,11 +520,13 @@ def seed_instance():
                     queue = db.query(Queue).filter(Queue.topic == q["topic"]).first()
                     if queue is None:
                         db.add(Queue(application_id=app.id, name=q["name"], description=q.get("description"),
-                                     topic=q["topic"], ttl_hours=q.get("ttl_hours"), ttl_action=q.get("ttl_action")))
+                                     topic=q["topic"], ttl_hours=q.get("ttl_hours"), ttl_action=q.get("ttl_action"),
+                                     required_role=q.get("required_role")))
                     else:   # the file is the source of truth for this instance's queues
                         queue.application_id, queue.name = app.id, q["name"]
                         queue.description = q.get("description")
                         queue.ttl_hours, queue.ttl_action = q.get("ttl_hours"), q.get("ttl_action")
+                        queue.required_role = q.get("required_role")
         db.commit()
         for user in (u for u in (db.query(User).filter(User.email == email).first(), demo) if u):
             for app in apps:

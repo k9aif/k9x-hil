@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
 from backend.models import User, Project, Application, Queue, Task, TaskAction, Branding
 from backend.auth import create_access_token, get_current_user, require_admin
+from backend.authorization import DecisionNotAuthorized, check_may_decide
 from backend.task_actions import apply_task_action, TaskConflictError
 
 router = APIRouter(prefix="/api")
@@ -178,19 +179,25 @@ def get_task_document(task_id: int, db: Session = Depends(get_db), _: User = Dep
 
 class TaskActionReq(BaseModel):
     action: str
-    actor: str
+    actor: Optional[str] = None      # ignored since 1.3.0: the decider is the authenticated user
     comment: Optional[str] = None
     result: Optional[dict] = None
 
 @router.post("/tasks/{task_id}/action")
 def perform_action(task_id: int, req: TaskActionReq, db: Session = Depends(get_db),
-                    _: User = Depends(get_current_user)):
+                    user: User = Depends(get_current_user)):
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         raise HTTPException(404, "Task not found")
 
+    # 1.3.0: the decider is the authenticated user (req.actor is ignored), and
+    # a decision needs the role the task requires.
     try:
-        status = apply_task_action(db, t, req.action, req.actor, req.comment, req.result)
+        check_may_decide(user, t, req.action)
+        status = apply_task_action(db, t, req.action, user.email, req.comment, req.result,
+                                   actor_role=user.role)
+    except DecisionNotAuthorized as exc:
+        raise HTTPException(403, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except TaskConflictError as exc:
@@ -251,6 +258,7 @@ def _task_dict(t, db, queues=None):
             "artifacts": t.artifacts, "jira_ticket": t.jira_ticket,
             "pii": bool(t.pii), "pii_fields": t.pii_fields,
             "ttl_hours": t.ttl_hours, "ttl_action": t.ttl_action,
+            "required_role": t.required_role, "decision_authority": t.decision_authority,
             "due_date": _iso(t.due_date), "created_at": _iso(t.created_at),
             "updated_at": _iso(t.updated_at), "completed_at": _iso(t.completed_at)}
 
