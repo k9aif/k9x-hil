@@ -5,6 +5,8 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import DataError, IntegrityError
+
 from backend.database import SessionLocal
 from backend.models import Queue, Task, TaskAction
 
@@ -51,24 +53,28 @@ async def _publish_to_dlq(topic: str, raw_value: bytes, reason: str) -> None:
         log.warning("[kafka_consumer] dead-lettered malformed message from topic=%s to %s (reason=%s)",
                     topic, dlq_topic, reason)
     except Exception:
+        # 1.4.1: raise, so the caller does not commit the offset and the message is retried.
         log.exception("[kafka_consumer] failed to publish to dead-letter topic=%s", dlq_topic)
+        raise
 
 
-def _ingest_message(topic: str, message: dict) -> None:
+def _ingest_message(topic: str, message: dict) -> str:
     """Create a Task from an inbound HIL task-creation message.
 
     The producing system (any Kafka-writing service, per K9X HIL's
     framework-agnostic design) owns the message contract; this only
-    maps it onto the Queue the topic belongs to. Messages on a topic
-    with no registered Queue are logged and dropped — a Queue must be
-    seeded/created for the topic first.
+    maps it onto the Queue the topic belongs to.
+
+    Returns "created", "duplicate" or "no_queue". A database failure is
+    raised, never swallowed (1.4.1): the caller then leaves the offset
+    uncommitted and the message is delivered again.
     """
     db = SessionLocal()
     try:
         queue = db.query(Queue).filter(Queue.topic == topic).first()
         if not queue:
-            log.warning("[kafka_consumer] no Queue registered for topic=%s; dropping message", topic)
-            return
+            log.warning("[kafka_consumer] no Queue registered for topic=%s", topic)
+            return "no_queue"
 
         correlation_id = message.get("correlation_id")
         if correlation_id:
@@ -78,7 +84,7 @@ def _ingest_message(topic: str, message: dict) -> None:
             ).first()
             if existing:
                 log.info("[kafka_consumer] duplicate correlation_id=%s on topic=%s; skipping", correlation_id, topic)
-                return
+                return "duplicate"
 
         ttl_hours = message.get("ttl_hours", queue.ttl_hours)
         due_date = (
@@ -110,18 +116,49 @@ def _ingest_message(topic: str, message: dict) -> None:
             due_date=due_date,
         )
         db.add(task)
-        db.commit()
-        db.refresh(task)
+        db.flush()  # the task and its "created" action commit together
         db.add(TaskAction(task_id=task.id, action="created", actor="system",
                            comment=f"Ingested from Kafka topic={topic}"))
         db.commit()
         log.info("[kafka_consumer] created task id=%s queue=%s topic=%s corr=%s",
                   task.id, queue.name, topic, correlation_id)
+        return "created"
     except Exception:
-        log.exception("[kafka_consumer] failed to ingest message on topic=%s", topic)
         db.rollback()
+        raise
     finally:
         db.close()
+
+
+async def _handle(msg) -> None:
+    """Store one inbound message as a task, or dead-letter it. Returns only when the
+    message is accounted for (created, duplicate, or on its .dlq topic); raises otherwise,
+    so its offset is not committed and it is delivered again (1.4.1)."""
+    try:
+        value = json.loads(msg.value.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        await _publish_to_dlq(msg.topic, msg.value, f"invalid JSON: {exc}")
+        return
+    if not isinstance(value, dict):
+        await _publish_to_dlq(msg.topic, msg.value,
+                              f"message body is not a JSON object (got {type(value).__name__})")
+        return
+    try:
+        outcome = _ingest_message(msg.topic, value)
+    except (DataError, IntegrityError) as exc:
+        # The database rejects this message itself; retrying would block the queue behind it.
+        await _publish_to_dlq(msg.topic, msg.value, f"rejected by the database: {exc.__class__.__name__}")
+        return
+    if outcome == "no_queue":
+        await _publish_to_dlq(msg.topic, msg.value, "no Queue registered for this topic")
+
+
+async def _consume(consumer) -> None:
+    """Commit each offset only after its message is accounted for. A failure propagates
+    to run_consumer(), which reconnects and resumes from the last committed offset."""
+    async for msg in consumer:
+        await _handle(msg)
+        await consumer.commit()
 
 
 async def run_consumer() -> None:
@@ -178,7 +215,9 @@ async def run_consumer() -> None:
             # from the last committed offset exactly as before, since
             # auto_offset_reset only applies when no valid offset exists yet.
             auto_offset_reset="earliest",
-            enable_auto_commit=True,
+            # 1.4.1: commit manually, after the task is stored (see _consume). Auto-commit
+            # committed on a timer, so a message whose ingest failed could be skipped for good.
+            enable_auto_commit=False,
             # No value_deserializer: parsing happens per-message below so a
             # single malformed message is dead-lettered and skipped, rather
             # than raising out of aiokafka's own deserialization step
@@ -192,22 +231,7 @@ async def run_consumer() -> None:
             await consumer.start()
             log.info("[kafka_consumer] listening | broker=%s | topics=%s", broker, topics)
             backoff_s = 2  # reset once a connection actually succeeds
-            async for msg in consumer:
-                try:
-                    try:
-                        value = json.loads(msg.value.decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                        await _publish_to_dlq(msg.topic, msg.value, f"invalid JSON: {exc}")
-                        continue
-                    if not isinstance(value, dict):
-                        await _publish_to_dlq(
-                            msg.topic, msg.value,
-                            f"message body is not a JSON object (got {type(value).__name__})",
-                        )
-                        continue
-                    _ingest_message(msg.topic, value)
-                except Exception:
-                    log.exception("[kafka_consumer] error handling message on topic=%s", msg.topic)
+            await _consume(consumer)
         except Exception:
             log.exception(
                 "[kafka_consumer] consumer loop failed (broker=%s) -- reconnecting in %ds",

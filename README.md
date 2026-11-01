@@ -55,4 +55,10 @@ The decider recorded with the decision, and sent in the reply (`actor`, `actor_r
 K9X Continuum does, for an SBB whose re-run inspection has findings or could not be verified).
 Approving it then needs a non-empty comment, otherwise `422`; the comment travels in the reply.
 
+**Intake never loses a task (1.4.1).** The consumer commits a topic offset only after its
+message is stored as a task, skipped as a duplicate (`correlation_id`), or dead-lettered to
+`<topic>.dlq`. If the database or the dead-letter publish fails, the offset stays uncommitted and
+the consumer reconnects and receives the message again; a message the database itself rejects, or
+one on a topic with no queue, is dead-lettered so it cannot block the queue.
+
 Tests: `pytest -q tests`.
