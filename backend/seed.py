@@ -11,7 +11,8 @@ from backend.profile import PROFILE
 log = logging.getLogger("k9x-hil.seed")
 
 DAS_PROJECT = "DAS (Defense Acquisition System)"
-OPENAI_PROJECT = "OpenAI Demo"
+OPENAI_PROJECT = "OpenAI Demo"   # retired: its application now sits under Demo (_move_openai_app_to_demo)
+DEMO_DESCRIPTION = "Demonstration projects: insurance document processing (EOC) and openai.k9x.ai accounts payable"
 DAS_DESCRIPTION = "Requirements to acquisition: Joint Force Requirements Process and Major Capability Acquisition"
 
 # public (hil.k9x.ai): demo projects/queues, the demo login on the sign-in
@@ -72,6 +73,20 @@ def seed():
     return seed_catalog(samples=True)
 
 
+def _move_openai_app_to_demo(db, demo_proj) -> None:
+    """The OpenAI Demo Application sits under Demo. An instance seeded with the separate "OpenAI Demo" project has
+    the application moved in place (its queue and tasks stay attached), and the emptied project removed."""
+    old = db.query(Project).filter(Project.name == OPENAI_PROJECT).first()
+    if not old:
+        return
+    for app in db.query(Application).filter(Application.project_id == old.id).all():
+        app.project_id = demo_proj.id
+    db.flush()      # autoflush is off: the emptiness check and the apps check below must see the move
+    if not db.query(Application).filter(Application.project_id == old.id).first():
+        db.delete(old)
+    db.commit()
+
+
 def seed_catalog(samples: bool):
     """Projects, applications and queues (the topics this instance consumes).
     samples=True adds the public demo's logins, sample people and example tasks."""
@@ -116,12 +131,13 @@ def seed_catalog(samples: bool):
             db.commit()
 
         # ── Projects ────────────────────────────────────────────────
-        if not db.query(Project).filter(Project.name == "Demo").first():
-            db.add(Project(name="Demo", description="Demonstration project — insurance document processing pipeline"))
+        demo = db.query(Project).filter(Project.name == "Demo").first()
+        if not demo:
+            db.add(Project(name="Demo", description=DEMO_DESCRIPTION))
+        elif demo.description != DEMO_DESCRIPTION:
+            demo.description = DEMO_DESCRIPTION
         if not db.query(Project).filter(Project.name == "K9 Platform").first():
             db.add(Project(name="K9 Platform", description="K9-AIF framework and ecosystem platform services"))
-        if not db.query(Project).filter(Project.name == OPENAI_PROJECT).first():
-            db.add(Project(name=OPENAI_PROJECT, description="openai.k9x.ai: OpenAI Agents SDK agents governed by K9-AIF"))
         # Shown as "DAS (Defense Acquisition System)"; renamed in place from the
         # earlier short name "DAS", so existing apps, queues and tasks stay attached.
         old_das = db.query(Project).filter(Project.name == "DAS").first()
@@ -140,7 +156,7 @@ def seed_catalog(samples: bool):
         demo_proj = db.query(Project).filter(Project.name == "Demo").first()
         k9_proj   = db.query(Project).filter(Project.name == "K9 Platform").first()
         das_proj  = db.query(Project).filter(Project.name == DAS_PROJECT).first()
-        openai_proj = db.query(Project).filter(Project.name == OPENAI_PROJECT).first()
+        _move_openai_app_to_demo(db, demo_proj)
 
         # ── Applications ─────────────────────────────────────────────
         apps_data = [
@@ -160,7 +176,7 @@ def seed_catalog(samples: bool):
                  description="Governance holds: k9x Shield or Granite Guardian refused an agent's input mid-stage; override or stop"),
             # openai.k9x.ai accounts payable demo: an OpenAI agent's payment paused by the SDK (needs_approval)
             # when the K9X Rules Engine says a person must approve it.
-            dict(project_id=openai_proj.id, name="OpenAI Demo Application",
+            dict(project_id=demo_proj.id, name="OpenAI Demo Application",
                  description="Accounts payable: invoice payments an OpenAI agent proposes, held for a person's approval"),
         ]
         for a in apps_data:

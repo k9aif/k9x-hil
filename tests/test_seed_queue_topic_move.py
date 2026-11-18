@@ -42,3 +42,38 @@ def test_old_topic_is_moved_in_place(monkeypatch):
     assert s.query(Queue).filter(Queue.topic == NEW).count() == 1
     assert s.query(Queue).filter(Queue.topic == OLD).count() == 0
     assert s.query(Queue).filter(Queue.name == "Invoice Approvals").count() == 1
+
+
+def test_openai_app_moves_under_demo(monkeypatch):
+    """An instance seeded with the separate "OpenAI Demo" project: its application (and queue) move under Demo in
+    place, the emptied project is removed, and nothing is duplicated."""
+    from backend.models import Application, Project
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+
+    @event.listens_for(engine, "connect")
+    def _attach(conn, _):
+        conn.execute("ATTACH DATABASE ':memory:' AS k9hil")
+
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    monkeypatch.setattr(seed, "SessionLocal", Session)
+    seed.seed_catalog(samples=False)
+
+    s = Session()                                                    # rebuild the earlier layout
+    old = Project(name=seed.OPENAI_PROJECT, description="old")
+    s.add(old)
+    s.flush()
+    app = s.query(Application).filter(Application.name == "OpenAI Demo Application").one()
+    app.project_id = old.id
+    s.commit()
+    app_id, queue_id = app.id, s.query(Queue).filter(Queue.topic == NEW).one().id
+
+    seed.seed_catalog(samples=False)
+    s.expire_all()
+    demo = s.query(Project).filter(Project.name == "Demo").one()
+    apps = s.query(Application).filter(Application.name == "OpenAI Demo Application").all()
+    assert [a.id for a in apps] == [app_id] and apps[0].project_id == demo.id
+    assert s.query(Project).filter(Project.name == seed.OPENAI_PROJECT).count() == 0
+    assert s.query(Queue).filter(Queue.topic == NEW).one().id == queue_id
+    assert demo.description == seed.DEMO_DESCRIPTION
