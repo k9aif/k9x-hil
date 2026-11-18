@@ -260,13 +260,17 @@ def seed_catalog(samples: bool):
                              "and stage (recorded with your name); reject = stop the job.",
                  topic="workflow.hil.das.governance-hold",
                  ttl_hours=72, ttl_action="reject"),
-            # Decisions go back on openai.ap-payments.replies; the demo's Router resumes the paused OpenAI run.
+            # K9-AIF convention (BaseHILOrchestrator): replies on hil.replies.openai-ap-payments, where the demo Router resumes the run.
             dict(application_id=openai_app.id, name="Invoice Approvals",
                  description="Invoice payments the K9X Rules Engine sent for approval (e.g. over $15,000, new vendor, "
                              "changed bank account). Approve and the agent's paused run pays; reject and it doesn't.",
-                 topic="workflow.hil.openai.ap-payments",
+                 topic="hil.requests.openai-ap-payments",
                  ttl_hours=24, ttl_action="reject"),
         ]
+        # 1.5.0 seeded Invoice Approvals as workflow.hil.openai.ap-payments: move it to the K9-AIF topic in place
+        old_ap = db.query(Queue).filter(Queue.topic == "workflow.hil.openai.ap-payments").first()
+        if old_ap and not db.query(Queue).filter(Queue.topic == "hil.requests.openai-ap-payments").first():
+            old_ap.topic = "hil.requests.openai-ap-payments"
         for q in queues_data:
             if not db.query(Queue).filter(Queue.topic == q["topic"]).first():
                 db.add(Queue(**q))
