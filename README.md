@@ -14,7 +14,7 @@ register disjoint topics, so a task only ever lands in one of them.
 | Where | hil.k9x.ai (`ubuntu/build-run.sh`, :8086) | LAN only (`ubuntu_internal/build-run.sh`, :8096), never tunnelled |
 | For | visitors | K9-AIF Framework Administrators only |
 | Badge (`HIL_BADGE`) | none | `Internal` |
-| Queues | the example applications: EOC, DAS, Continuum, Process Studio AP | K9X Sentinel's Security tasks |
+| Queues | the example applications: EOC, DAS, Continuum, Process Studio AP, OpenAI Demo Application (openai.k9x.ai invoice approvals) | K9X Sentinel's Security tasks |
 | Logins | demo/admin, shown on the sign-in page | one admin (`HIL_ADMIN_PASSWORD`), nothing shown |
 | Actions | admin, manager (demo) or assignee; harmless: no example application consumes the replies | the framework admin |
 
@@ -22,6 +22,13 @@ Internal setup: copy `.env` to `.env.internal` and set the keys in
 `.env.internal.example` (its own `POSTGRES_SCHEMA`, `HIL_CONSUMER_GROUP` and
 `JWT_SECRET_KEY`); the script refuses to start if they're shared with public.
 `HIL_ADMIN_PASSWORD` (re)sets the internal admin's password on every start.
+
+## API key for a server-to-server caller (1.5.0)
+
+A backend that shows and decides tasks on behalf of its own users (the openai.k9x.ai demo's HIL pane) can send
+`X-API-Key` instead of a sign-in token. It must match `HIL_API_KEY` and acts as `HIL_API_KEY_USER`: that user's
+role still governs what may be decided, and decisions are recorded under that user. Keep the key on the
+server; never send it to a browser. Empty `HIL_API_KEY` turns it off. Tests: `tests/test_api_key.py`.
 
 ## Run your own, rebranded for your organisation
 

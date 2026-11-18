@@ -48,7 +48,7 @@ class NoCacheStaticFiles(StaticFiles):
         return response
 
 
-app = FastAPI(title="k9x HIL", version="1.4.1")
+app = FastAPI(title="k9x HIL", version="1.5.0")
 app.include_router(router)
 
 if _STATIC.exists():

@@ -11,6 +11,7 @@ from backend.profile import PROFILE
 log = logging.getLogger("k9x-hil.seed")
 
 DAS_PROJECT = "DAS (Defense Acquisition System)"
+OPENAI_PROJECT = "OpenAI Demo"
 DAS_DESCRIPTION = "Requirements to acquisition: Joint Force Requirements Process and Major Capability Acquisition"
 
 # public (hil.k9x.ai): demo projects/queues, the demo login on the sign-in
@@ -119,6 +120,8 @@ def seed_catalog(samples: bool):
             db.add(Project(name="Demo", description="Demonstration project — insurance document processing pipeline"))
         if not db.query(Project).filter(Project.name == "K9 Platform").first():
             db.add(Project(name="K9 Platform", description="K9-AIF framework and ecosystem platform services"))
+        if not db.query(Project).filter(Project.name == OPENAI_PROJECT).first():
+            db.add(Project(name=OPENAI_PROJECT, description="openai.k9x.ai: OpenAI Agents SDK agents governed by K9-AIF"))
         # Shown as "DAS (Defense Acquisition System)"; renamed in place from the
         # earlier short name "DAS", so existing apps, queues and tasks stay attached.
         old_das = db.query(Project).filter(Project.name == "DAS").first()
@@ -137,6 +140,7 @@ def seed_catalog(samples: bool):
         demo_proj = db.query(Project).filter(Project.name == "Demo").first()
         k9_proj   = db.query(Project).filter(Project.name == "K9 Platform").first()
         das_proj  = db.query(Project).filter(Project.name == DAS_PROJECT).first()
+        openai_proj = db.query(Project).filter(Project.name == OPENAI_PROJECT).first()
 
         # ── Applications ─────────────────────────────────────────────
         apps_data = [
@@ -154,6 +158,10 @@ def seed_catalog(samples: bool):
                  description="Materiel Development Decision, Milestone A and the System Requirements Review"),
             dict(project_id=das_proj.id, name="DAS Governance",
                  description="Governance holds: k9x Shield or Granite Guardian refused an agent's input mid-stage; override or stop"),
+            # openai.k9x.ai accounts payable demo: an OpenAI agent's payment paused by the SDK (needs_approval)
+            # when the K9X Rules Engine says a person must approve it.
+            dict(project_id=openai_proj.id, name="OpenAI Demo Application",
+                 description="Accounts payable: invoice payments an OpenAI agent proposes, held for a person's approval"),
         ]
         for a in apps_data:
             if not db.query(Application).filter(Application.name == a["name"], Application.project_id == a["project_id"]).first():
@@ -166,6 +174,7 @@ def seed_catalog(samples: bool):
         jfrp_app    = db.query(Application).filter(Application.name == "Requirements (JFRP)").first()
         mca_app     = db.query(Application).filter(Application.name == "Major Capability Acquisition").first()
         gov_app     = db.query(Application).filter(Application.name == "DAS Governance").first()
+        openai_app  = db.query(Application).filter(Application.name == "OpenAI Demo Application").first()
 
         # ── Assign users to applications ─────────────────────────────
         james = db.query(User).filter(User.email == "james.park@k9x.ai").first()
@@ -251,6 +260,12 @@ def seed_catalog(samples: bool):
                              "and stage (recorded with your name); reject = stop the job.",
                  topic="workflow.hil.das.governance-hold",
                  ttl_hours=72, ttl_action="reject"),
+            # Decisions go back on openai.ap-payments.replies; the demo's Router resumes the paused OpenAI run.
+            dict(application_id=openai_app.id, name="Invoice Approvals",
+                 description="Invoice payments the K9X Rules Engine sent for approval (e.g. over $15,000, new vendor, "
+                             "changed bank account). Approve and the agent's paused run pays; reject and it doesn't.",
+                 topic="workflow.hil.openai.ap-payments",
+                 ttl_hours=24, ttl_action="reject"),
         ]
         for q in queues_data:
             if not db.query(Queue).filter(Queue.topic == q["topic"]).first():
