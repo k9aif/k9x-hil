@@ -552,26 +552,57 @@ async function openTask(id) {
     document.getElementById("modal-body").innerHTML = taskDetailHtml(t);
     document.getElementById("task-modal").style.display = "flex";
 
-    const hasS3Artifact = (t.artifacts || []).some(a => typeof a === "string" && a.startsWith("s3://"));
-    if (hasS3Artifact) loadDocumentPreview(id);
+    const arts = t.artifact_list || [];
+    const first = arts.findIndex(a => a.uri.startsWith("s3://") && a.role === "primary");
+    const pick = first >= 0 ? first : arts.findIndex(a => a.uri.startsWith("s3://"));
+    if (pick >= 0) previewArtifact(id, pick);
   } catch(e) { console.error(e); }
 }
 
-async function loadDocumentPreview(taskId) {
-  const el = document.getElementById("doc-preview-" + taskId);
+// 1.6.0: any s3:// artifact, fetched by HIL from object storage with its own media type. The request needs the
+// sign-in token, so the file is fetched here and shown from memory: a PDF in the browser's viewer, an image inline,
+// text as text; anything else is offered as a download.
+const _artifactUrls = [];
+async function artifactBlob(taskId, index) {
+  const r = await authFetch(`/api/tasks/${taskId}/artifacts/${index}`);
+  if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.detail || r.statusText); }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  _artifactUrls.push(url);
+  return { blob, url, type: (blob.type || "").split(";")[0] };
+}
+
+async function previewArtifact(taskId, index) {
+  const el = document.getElementById("artifact-preview-" + taskId);
   if (!el) return;
+  document.querySelectorAll(`[data-artifact-task="${taskId}"]`).forEach(b =>
+    b.classList.toggle("active", Number(b.dataset.artifactIndex) === index));
+  el.textContent = "Loading from object storage…";
   try {
-    const r = await authFetch("/api/tasks/" + taskId + "/document");
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      el.textContent = "Could not load document: " + (err.detail || r.statusText);
-      return;
+    const { blob, url, type } = await artifactBlob(taskId, index);
+    el.innerHTML = "";
+    if (type === "application/pdf") {
+      const f = document.createElement("iframe"); f.className = "artifact-frame"; f.src = url; f.title = "Artifact preview";
+      el.appendChild(f);
+    } else if (type.startsWith("image/")) {
+      const img = document.createElement("img"); img.className = "artifact-image"; img.src = url; img.alt = "Artifact preview";
+      el.appendChild(img);
+    } else if (type.startsWith("text/") || type === "application/json") {
+      const pre = document.createElement("div"); pre.className = "modal-payload"; pre.textContent = await blob.text();
+      el.appendChild(pre);
+    } else {
+      el.innerHTML = `<span class="muted-note">No preview for ${esc(type || "this file")}. </span>`;
+      const a = document.createElement("a"); a.href = url; a.download = ""; a.textContent = "Download"; a.className = "artifact-link";
+      el.appendChild(a);
     }
-    const data = await r.json();
-    el.textContent = data.content;
-  } catch(e) {
-    el.textContent = "Could not load document: " + e.message;
+  } catch (e) {
+    el.textContent = "Could not load the artifact: " + e.message;
   }
+}
+
+async function openArtifact(taskId, index) {
+  try { const { url } = await artifactBlob(taskId, index); window.open(url, "_blank", "noopener"); }
+  catch (e) { alert("Could not open the artifact: " + e.message); }
 }
 
 // Any orchestrator's agent can put anything in Task.payload -- these are
@@ -597,7 +628,8 @@ function renderPayloadSection(payload) {
   const entries = Object.entries(payload).filter(
     ([k, v]) => v !== null && v !== undefined && v !== "" && !PAYLOAD_SKIP_KEYS.includes(k)
   );
-  if (!entries.length) return "";
+  if (!entries.length) return `<div class="modal-section"><div class="modal-section-title">Payload</div>
+    <div class="muted-note">No payload</div></div>`;
 
   const narrative = entries.find(([k]) => PAYLOAD_NARRATIVE_KEYS.includes(k));
   const tagGroups = entries.filter(([k, v]) => Array.isArray(v) && (!narrative || k !== narrative[0]));
@@ -605,7 +637,7 @@ function renderPayloadSection(payload) {
     !Array.isArray(v) && (!narrative || k !== narrative[0])
   );
 
-  let html = `<div class="modal-section"><div class="modal-section-title">Payload (from agent)</div>`;
+  let html = `<div class="modal-section"><div class="modal-section-title">Payload</div>`;
 
   if (narrative) {
     html += `<div class="modal-why">${esc(String(narrative[1]))}</div>`;
@@ -642,98 +674,94 @@ function taskDetailHtml(t) {
                 || (isEscalated && (isAdmin || isManager));
   const canEscalate = isActive && (isMyTask || isAdmin || isManager);
 
+  // 1.6.0: one standard view for every task (k9x.hil.task/v1). Every section and every field is always shown,
+  // filled from the task; an absent value reads "none", so no producer's task looks different from another's.
+  const none = '<span class="muted-note">none</span>';
+  const kv = (label, value) => `<span class="modal-kv-label">${label}</span><span class="modal-kv-value">${value}</span>`;
+  const v = (x) => (x === null || x === undefined || x === "") ? none : esc(String(x));
+  const decidedBy = t.required_role
+    ? `${t.decision_authority ? esc(t.decision_authority) + " — " : ""}role ${esc(t.required_role)} or above`
+    : (t.decision_authority ? esc(t.decision_authority) + " — any role" : "any role");
+  const ttl = t.ttl_hours ? `${t.ttl_hours} hours, then ${esc(t.ttl_action || "expire")}` : none;
+
   let html = `
     <div class="modal-section">
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <span class="badge badge-${t.status}">${t.status.replace(/_/g," ")}</span>
         <span class="badge badge-${t.priority}">${t.priority}</span>
+        ${t.task_type ? `<span class="badge badge-type">${esc(t.task_type)}</span>` : ''}
         ${t.pii ? '<span class="badge badge-pii">PII</span>' : ''}
         ${t.ttl_hours ? `<span class="badge badge-ttl">TTL ${t.ttl_hours}h → ${t.ttl_action || 'expire'}</span>` : ''}
       </div>
-      <div class="modal-desc">${esc(t.description || "")}</div>
+      <div class="modal-desc">${t.description ? esc(t.description) : none}</div>
     </div>
 
     <div class="modal-section">
-      <div class="modal-section-title">Details</div>
+      <div class="modal-section-title">Decision</div>
       <div class="modal-kv">
-        <span class="modal-kv-label">Application</span>
-        <span class="modal-kv-value">${esc(t.application_name || "—")}</span>
-        ${t.require_comment ? `<span class="modal-kv-label">Approval</span>
-        <span class="modal-kv-value">needs a written justification in the comment</span>` : ''}
-        ${t.required_role ? `<span class="modal-kv-label">Decided by</span>
-        <span class="modal-kv-value">${esc(t.decision_authority || "")}${t.decision_authority ? " — " : ""}role ${esc(t.required_role)} or above</span>` : ''}
-        <span class="modal-kv-label">Queue</span>
-        <span class="modal-kv-value">${esc(t.queue_name || "—")}</span>
-        <span class="modal-kv-label">Orchestrator</span>
-        <span class="modal-kv-value">${esc(t.source_orchestrator || "—")}</span>
-        <span class="modal-kv-label">Topic</span>
-        <span class="modal-kv-value">${esc(t.source_topic || "—")}</span>
-        <span class="modal-kv-label">Reply To</span>
-        <span class="modal-kv-value">${esc(t.reply_to || "—")}</span>
-        <span class="modal-kv-label">Correlation ID</span>
-        <span class="modal-kv-value">${esc(t.correlation_id || "—")}</span>
-        <span class="modal-kv-label">Assigned to</span>
-        <span class="modal-kv-value">${esc(t.assigned_to || "Unassigned")}</span>
-        <span class="modal-kv-label">Created</span>
-        <span class="modal-kv-value">${formatDate(t.created_at)}</span>
-        ${t.due_date ? `<span class="modal-kv-label">Due</span><span class="modal-kv-value">${formatDate(t.due_date)}</span>` : ""}
-        ${t.completed_at ? `<span class="modal-kv-label">Completed</span><span class="modal-kv-value">${formatDate(t.completed_at)}</span>` : ""}
+        ${kv("Type", v(t.task_type))}
+        ${kv("Application", v(t.application_name))}
+        ${kv("Queue", v(t.queue_name))}
+        ${kv("Decided by", decidedBy)}
+        ${kv("Approval", t.require_comment ? "needs a written justification in the comment" : "comment optional")}
+        ${kv("Assigned to", t.assigned_to ? esc(t.assigned_to) : "Unassigned")}
+        ${kv("Deadline", ttl)}
+        ${kv("Created", formatDate(t.created_at))}
+        ${kv("Due", t.due_date ? formatDate(t.due_date) : none)}
+        ${kv("Completed", t.completed_at ? formatDate(t.completed_at) : none)}
+        ${kv("PII", t.pii ? ("yes" + ((t.pii_fields || []).length ? ": " + esc(t.pii_fields.join(", ")) : "")) : "no")}
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-title">Source</div>
+      <div class="modal-kv">
+        ${kv("Orchestrator", v(t.source_orchestrator))}
+        ${kv("Topic", v(t.source_topic))}
+        ${kv("Reply to", v(t.reply_to))}
+        ${kv("Correlation ID", v(t.correlation_id))}
+        ${kv("Jira ticket", v(t.jira_ticket))}
+        ${kv("Contract", esc(t.contract === "legacy" ? "legacy (sent before k9x.hil.task/v1)" : (t.contract || "legacy")))}
       </div>
     </div>
   `;
 
-  if (t.payload) {
-    html += renderPayloadSection(t.payload);
-  }
+  html += renderPayloadSection(t.payload || {});
 
-  if (t.artifacts && t.artifacts.length > 0) {
-    // Artifacts arrive either as plain URI strings (e.g. "s3://bucket/key",
-    // the current DAS/JCIDS shape) or as {name, pii} objects -- support both.
+  const arts = t.artifact_list || [];
+  html += `<div class="modal-section">
+    <div class="modal-section-title">Artifacts (${arts.length})</div>
+    ${arts.length ? `<div class="artifact-list">
+      ${arts.map((a, i) => {
+        const s3 = a.uri.startsWith("s3://");
+        const meta = [a.role, a.media_type].filter(Boolean).map(esc).join(" · ");
+        const open = s3
+          ? `<button class="btn btn-sm artifact-btn" data-artifact-task="${t.id}" data-artifact-index="${i}" onclick="previewArtifact(${t.id},${i})">Preview</button>
+             <button class="btn btn-sm artifact-btn" onclick="openArtifact(${t.id},${i})">Open</button>`
+          : `<a class="btn btn-sm artifact-btn" href="${esc(a.uri)}" target="_blank" rel="noopener noreferrer">Open link</a>`;
+        return `<div class="artifact-item">
+          <span class="artifact-icon">${s3 ? "📄" : "🔗"}</span>
+          <span class="artifact-body"><span class="artifact-name">${esc(a.title || a.uri)}</span>
+            <span class="artifact-uri">${esc(a.uri)}${meta ? " · " + meta : ""}</span></span>
+          ${a.pii ? '<span class="badge badge-pii" style="font-size:9px">PII</span>' : ''}
+          <span class="artifact-actions">${open}</span>
+        </div>`;
+      }).join("")}
+    </div>` : `<div class="muted-note">No artifacts</div>`}
+  </div>`;
+
+  if (arts.some(a => a.uri.startsWith("s3://"))) {
     html += `<div class="modal-section">
-      <div class="modal-section-title">Artifacts</div>
-      <div class="artifact-list">
-        ${t.artifacts.map(a => {
-          const uri = typeof a === "string" ? a : (a.url || a.name || "");
-          const label = typeof a === "string" ? a : (a.name || a.url || "");
-          const pii = typeof a === "object" && a.pii;
-          const isWebLink = /^https?:\/\//i.test(uri);
-          const title = isWebLink ? "Open document" : "Object storage URI -- see Document Preview below";
-          return `<div class="artifact-item">
-            <span class="artifact-icon">📄</span>
-            <a class="artifact-name artifact-link" href="${esc(uri)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(label)}</a>
-            ${pii ? '<span class="badge badge-pii" style="font-size:9px">PII</span>' : ''}
-          </div>`;
-        }).join("")}
-      </div>
+      <div class="modal-section-title">Preview</div>
+      <div class="artifact-preview" id="artifact-preview-${t.id}">Choose Preview on an artifact.</div>
     </div>`;
   }
 
-  const s3Artifact = (t.artifacts || []).find(a => typeof a === "string" && a.startsWith("s3://"));
-  if (s3Artifact) {
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Document Preview</div>
-      <div class="modal-payload" id="doc-preview-${t.id}">Loading document from object storage…</div>
-    </div>`;
-  }
-
-  if (t.jira_ticket) {
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Jira Ticket</div>
-      <div class="artifact-list">
-        <div class="artifact-item">
-          <span class="artifact-icon">🎫</span>
-          <span class="artifact-name">${esc(t.jira_ticket)}</span>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  if (t.result) {
-    html += `<div class="modal-section">
-      <div class="modal-section-title">Result (human decision)</div>
-      <div class="modal-payload" style="color:var(--green)">${esc(JSON.stringify(t.result, null, 2))}</div>
-    </div>`;
-  }
+  html += `<div class="modal-section">
+    <div class="modal-section-title">Result (human decision)</div>
+    ${t.result ? `<div class="modal-payload" style="color:var(--green)">${esc(JSON.stringify(t.result, null, 2))}</div>`
+               : `<div class="muted-note">${["completed","rejected","expired"].includes(t.status) ? "none recorded" : "not decided yet"}</div>`}
+  </div>`;
 
   // Timeline
   if (t.actions && t.actions.length > 0) {
@@ -829,7 +857,7 @@ async function taskAction(taskId, action) {
   else closeTaskModal();
 }
 
-function closeTaskModal() { document.getElementById("task-modal").style.display = "none"; }
+function closeTaskModal() { document.getElementById("task-modal").style.display = "none"; while (_artifactUrls.length) URL.revokeObjectURL(_artifactUrls.pop()); }
 function closeModal(e) { if (e.target === e.currentTarget) closeTaskModal(); }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

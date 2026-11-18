@@ -9,6 +9,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 
 from backend.database import SessionLocal
 from backend.models import Queue, Task, TaskAction
+from backend.task_contract import ContractViolation, accept
 
 log = logging.getLogger("k9x-hil.kafka_consumer")
 
@@ -61,14 +62,15 @@ async def _publish_to_dlq(topic: str, raw_value: bytes, reason: str) -> None:
 def _ingest_message(topic: str, message: dict) -> str:
     """Create a Task from an inbound HIL task-creation message.
 
-    The producing system (any Kafka-writing service, per K9X HIL's
-    framework-agnostic design) owns the message contract; this only
-    maps it onto the Queue the topic belongs to.
+    HIL owns the message contract (backend/task_contract.py, k9x.hil.task/v1):
+    a message naming it must conform (ContractViolation otherwise, which the
+    caller dead-letters); a legacy message is converted and accepted as before.
 
     Returns "created", "duplicate" or "no_queue". A database failure is
     raised, never swallowed (1.4.1): the caller then leaves the offset
     uncommitted and the message is delivered again.
     """
+    message, contract = accept(message)       # raises ContractViolation before anything is stored
     db = SessionLocal()
     try:
         queue = db.query(Queue).filter(Queue.topic == topic).first()
@@ -113,6 +115,8 @@ def _ingest_message(topic: str, message: dict) -> str:
             required_role=message.get("required_role") or queue.required_role,
             decision_authority=message.get("decision_authority"),
             require_comment=bool(message.get("require_comment", False)),
+            task_type=message.get("task_type"),
+            contract=contract,
             due_date=due_date,
         )
         db.add(task)
@@ -145,6 +149,9 @@ async def _handle(msg) -> None:
         return
     try:
         outcome = _ingest_message(msg.topic, value)
+    except ContractViolation as exc:
+        await _publish_to_dlq(msg.topic, msg.value, f"does not conform to k9x.hil.task/v1: {exc}"[:2000])
+        return
     except (DataError, IntegrityError) as exc:
         # The database rejects this message itself; retrying would block the queue behind it.
         await _publish_to_dlq(msg.topic, msg.value, f"rejected by the database: {exc.__class__.__name__}")

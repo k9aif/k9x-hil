@@ -106,6 +106,8 @@ class Task(Base):
     required_role        = Column(String(20))     # minimum HIL role allowed to decide (1.3.0)
     decision_authority   = Column(String(255))    # who decides, as the producer names it (1.3.0)
     require_comment      = Column(Boolean, default=False)  # approval needs a written justification (1.4.0)
+    task_type            = Column(String(100))    # what kind of task (k9x.hil.task/v1, 1.6.0)
+    contract             = Column(String(40))     # k9x.hil.task/v1, or legacy (before the contract)
     due_date             = Column(DateTime)
     created_at           = Column(DateTime, server_default=func.now())
     updated_at           = Column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -3,6 +3,7 @@ import os
 import boto3
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
@@ -12,6 +13,7 @@ from backend.auth import create_access_token, get_current_user, require_admin
 from backend.authorization import (DecisionNotAuthorized, JustificationRequired, check_justification,
                                    check_may_decide)
 from backend.task_actions import apply_task_action, TaskConflictError
+from backend.task_contract import SCHEMA as TASK_SCHEMA, media_type_of, normalize_artifacts
 
 router = APIRouter(prefix="/api")
 
@@ -178,6 +180,71 @@ def get_task_document(task_id: int, db: Session = Depends(get_db), _: User = Dep
     return {"bucket": bucket, "key": key, "content": content}
 
 
+# ── Task contract and artifacts (1.6.0) ──────────────────────────────────────
+
+@router.get("/contract/task")
+def task_contract():
+    """HIL's task contract (k9x.hil.task/v1) as JSON Schema: what a producer publishes to create a task.
+    Public: it describes the message, not any data."""
+    return TASK_SCHEMA
+
+
+_INLINE_TYPES = {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain",
+                 "application/json", "text/markdown", "text/csv"}
+_MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
+
+
+def _s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        config=boto3.session.Config(s3={"addressing_style": "path"}),
+    )
+
+
+@router.get("/tasks/{task_id}/artifacts/{index}")
+def get_task_artifact(task_id: int, index: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """One of the task's s3:// artifacts, fetched by HIL from object storage and served with its own media type
+    (a PDF as a PDF). Shown inline only for types that can't run script (PDF, images, plain text); anything else is
+    a download. https:// artifacts are links: the browser opens them."""
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    artifacts = normalize_artifacts(t.artifacts)
+    if not 0 <= index < len(artifacts):
+        raise HTTPException(404, "No such artifact on this task")
+    artifact = artifacts[index]
+    uri = artifact["uri"]
+    if not uri.startswith("s3://"):
+        raise HTTPException(400, "This artifact is a web link: open it directly")
+    bucket, _, key = uri[len("s3://"):].partition("/")
+    if not bucket or not key:
+        raise HTTPException(502, f"Malformed artifact URI: {uri}")
+    try:
+        obj = _s3_client().get_object(Bucket=bucket, Key=key)
+        if (obj.get("ContentLength") or 0) > _MAX_ARTIFACT_BYTES:
+            raise HTTPException(413, "Artifact is larger than 25 MB")
+        body = obj["Body"].read(_MAX_ARTIFACT_BYTES + 1)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"Could not fetch artifact from object storage ({bucket}/{key}): {type(exc).__name__}")
+    if len(body) > _MAX_ARTIFACT_BYTES:
+        raise HTTPException(413, "Artifact is larger than 25 MB")
+    media = media_type_of(artifact, obj.get("ContentType"))
+    if media in ("text/markdown", "text/csv"):
+        media = "text/plain"
+    inline = media in _INLINE_TYPES
+    name = key.rsplit("/", 1)[-1].replace('"', "")
+    headers = {"Content-Disposition": f'{"inline" if inline else "attachment"}; filename="{name}"',
+               "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"}
+    if media != "application/pdf":            # the browser's PDF viewer does not run in a sandboxed document
+        headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
+    return Response(body, media_type=media, headers=headers)
+
+
 class TaskActionReq(BaseModel):
     action: str
     actor: Optional[str] = None      # ignored since 1.3.0: the decider is the authenticated user
@@ -259,7 +326,9 @@ def _task_dict(t, db, queues=None):
             "application_name": app.name if app else None,
             "application_id": app.id if app else None,
             "payload": t.payload, "result": t.result,
-            "artifacts": t.artifacts, "jira_ticket": t.jira_ticket,
+            "artifacts": t.artifacts, "artifact_list": normalize_artifacts(t.artifacts),
+            "task_type": t.task_type, "contract": t.contract or "legacy",
+            "jira_ticket": t.jira_ticket,
             "pii": bool(t.pii), "pii_fields": t.pii_fields,
             "ttl_hours": t.ttl_hours, "ttl_action": t.ttl_action,
             "required_role": t.required_role, "decision_authority": t.decision_authority,

@@ -23,6 +23,36 @@ Internal setup: copy `.env` to `.env.internal` and set the keys in
 `JWT_SECRET_KEY`); the script refuses to start if they're shared with public.
 `HIL_ADMIN_PASSWORD` (re)sets the internal admin's password on every start.
 
+## The task contract: k9x.hil.task/v1 (1.6.0)
+
+K9X HIL owns the structure of a task. A producer creates one by publishing a JSON message on a queue's topic that
+conforms to the contract. The contract is served at `GET /api/contract/task` (JSON Schema) and published in this
+repository as `contract/k9x.hil.task.v1.schema.json`. HIL enforces the same schema.
+
+| Field | Meaning |
+|---|---|
+| `contract` | `"k9x.hil.task/v1"` |
+| `task_type` | what kind of task, for example `invoice-approval`, `das-gate`, `security-finding` |
+| `title`, `description` | what the reviewer is asked to decide |
+| `correlation_id`, `reply_to` | the producer's id for this decision, and the topic the decision goes back on |
+| `source_orchestrator`, `source_topic` | who asked |
+| `priority` | `low`, `medium`, `high` or `critical` |
+| `required_role`, `decision_authority` | the lowest HIL role allowed to decide, and who decides as the producer names it |
+| `require_comment` | approval needs a written justification |
+| `ttl_hours`, `ttl_action` | the deadline, and what happens after it (`reject`, `expire` or `escalate`) |
+| `pii`, `pii_fields` | personal data in the task |
+| `jira_ticket` | a linked ticket |
+| `payload` | what the reviewer reads; its fields depend on `task_type` |
+| `artifacts` | any number of `{uri, title, media_type, role, pii}`: `s3://bucket/key` (HIL fetches it from S3/MinIO) or `https://` links; `role` is `primary` (the document the decision is about) or `supporting` |
+
+A message that names the contract and does not conform goes to `<topic>.dlq` with the reasons, and no task is
+created. A message without `contract` (producers written before 1.6.0) is converted and accepted as before: plain-string
+artifacts become artifact objects, unknown fields are dropped, and gaps are logged.
+
+Every task is shown in one standard view: the same sections and fields for every producer, with "none" where a value
+is absent. Each `s3://` artifact can be previewed or opened: a PDF opens in the browser's viewer, an image inline,
+text as text, anything else as a download. Tests: `tests/test_task_contract.py`.
+
 ## API key for a server-to-server caller (1.5.0)
 
 A backend that shows and decides tasks on behalf of its own users (the openai.k9x.ai demo's HIL pane) can send

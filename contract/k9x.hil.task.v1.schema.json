@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hil.k9x.ai/api/contract/task",
+  "title": "K9X HIL task (k9x.hil.task/v1)",
+  "description": "The message a producer publishes on a HIL queue topic to create one task.",
+  "type": "object",
+  "required": [
+    "contract",
+    "title",
+    "correlation_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "k9x.hil.task/v1"
+    },
+    "task_type": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$",
+      "description": "what kind of task: e.g. invoice-approval, das-gate, security-finding"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 20000
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "the producer's id for this decision; the reply carries it back"
+    },
+    "reply_to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 255
+    },
+    "source_orchestrator": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 255
+    },
+    "source_topic": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 255
+    },
+    "priority": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "assigned_to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 255
+    },
+    "required_role": {
+      "enum": [
+        "worker",
+        "manager",
+        "admin",
+        null
+      ],
+      "description": "lowest HIL role allowed to approve or reject"
+    },
+    "decision_authority": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 255
+    },
+    "require_comment": {
+      "type": "boolean",
+      "description": "approval needs a written justification"
+    },
+    "ttl_hours": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 8760
+    },
+    "ttl_action": {
+      "enum": [
+        "reject",
+        "expire",
+        "escalate",
+        null
+      ]
+    },
+    "pii": {
+      "type": "boolean"
+    },
+    "pii_fields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "maxItems": 100
+    },
+    "jira_ticket": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500
+    },
+    "payload": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "what the reviewer reads; its fields depend on task_type"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "A document or link the reviewer needs. s3:// objects are fetched by HIL itself (S3/MinIO); https:// links open in the browser.",
+        "required": [
+          "uri"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "uri": {
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "^(s3://[^/\\s]+/\\S+|https?://\\S+)$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "media_type": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[a-z]+/[a-z0-9.+-]+$"
+          },
+          "role": {
+            "enum": [
+              "primary",
+              "supporting"
+            ],
+            "description": "primary: the document the decision is about; supporting: context"
+          },
+          "pii": {
+            "type": "boolean"
+          }
+        }
+      },
+      "maxItems": 50
+    }
+  }
+}

@@ -106,6 +106,20 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .artifact-link { color: var(--accent); text-decoration: underline; text-decoration-style: dotted; cursor: pointer; }
 .artifact-link:hover { text-decoration-style: solid; }
 
+/* 1.6.0 standard task view: artifacts as objects, preview of any s3:// artifact */
+.badge-type { background: #0ea5e922; color: var(--accent); }
+.muted-note { color: var(--muted); font-style: italic; }
+.modal-section > .muted-note { font-size: 12.5px; }
+.artifact-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.artifact-uri { font-size: 10.5px; color: var(--muted); overflow-wrap: anywhere; }
+.artifact-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.artifact-btn { font-size: 11px; padding: 3px 9px; text-decoration: none; }
+.artifact-btn.active { outline: 2px solid var(--accent); }
+.artifact-preview { min-height: 40px; font-size: 12px; }
+.artifact-frame { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.artifact-image { max-width: 100%; border: 1px solid var(--border); border-radius: 6px; }
+@media (max-width: 640px) { .artifact-item { flex-wrap: wrap; } .artifact-actions { width: 100%; } }
+
 .sidebar-desc {
   padding: 16px; margin: 0 8px; background: var(--bg); border-radius: 8px;
   border: 1px solid var(--border);
