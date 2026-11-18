@@ -645,7 +645,7 @@ function renderPayloadSection(payload) {
 
   for (const [k, arr] of tagGroups) {
     html += `<div class="modal-kv-label" style="margin-bottom:4px">${esc(humanizeKey(k))}</div>
-      <div class="signal-tags">${arr.map(v => `<span class="signal-tag">${esc(String(v))}</span>`).join("")}</div>`;
+      <div class="signal-tags">${arr.map(v => `<span class="signal-tag">${esc(typeof v === "object" && v !== null ? JSON.stringify(v) : String(v))}</span>`).join("")}</div>`;
   }
 
   if (rows.length) {
