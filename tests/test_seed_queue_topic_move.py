@@ -77,3 +77,45 @@ def test_openai_app_moves_under_demo(monkeypatch):
     assert s.query(Project).filter(Project.name == seed.OPENAI_PROJECT).count() == 0
     assert s.query(Queue).filter(Queue.topic == NEW).one().id == queue_id
     assert demo.description == seed.DEMO_DESCRIPTION
+
+
+
+_ASSIGNED = r"""
+import os, sys
+sys.path.insert(0, sys.argv[1])
+os.environ["JWT_SECRET_KEY"] = "test-secret"
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+import backend.seed as seed
+from backend.models import Base, Application, User, user_applications
+engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+@event.listens_for(engine, "connect")
+def _attach(conn, _):
+    conn.execute("ATTACH DATABASE ':memory:' AS k9hil")
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+seed.SessionLocal = Session
+seed.seed_catalog(samples=True)
+s = Session()
+app_id = s.query(Application).filter(Application.name == "OpenAI Demo Application").one().id
+for email in ("demo@k9x.ai", "admin@k9x.ai"):
+    uid = s.query(User).filter(User.email == email).one().id
+    rows = s.execute(user_applications.select().where(user_applications.c.user_id == uid,
+                                                      user_applications.c.application_id == app_id)).all()
+    assert rows, email
+print("ok")
+"""
+
+
+def test_openai_app_assigned_to_demo_admin_ravi():
+    """Home lists only the user's assigned applications: the OpenAI Demo Application must be assigned, or nobody
+    sees it (found live after the move under Demo). Runs the full public seed in a clean process: other modules in
+    this suite reconfigure the models for SQLite, which breaks the seed's many-to-many join in a shared process."""
+    import subprocess
+
+    root = str(Path(__file__).resolve().parent.parent)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("POSTGRES_")}
+    env["POSTGRES_SCHEMA"] = "k9hil"
+    out = subprocess.run([sys.executable, "-c", _ASSIGNED, root], cwd=root, env=env, capture_output=True, text=True)
+    assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr[-1500:]

@@ -207,15 +207,15 @@ def seed_catalog(samples: bool):
         if maria and archrev_app not in maria.applications:
             maria.applications.append(archrev_app)
         if ravi:
-            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app]:
+            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app, openai_app]:
                 if app not in ravi.applications:
                     ravi.applications.append(app)
         if demo:
-            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app]:
+            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app, openai_app]:
                 if app not in demo.applications:
                     demo.applications.append(app)
         if admin:
-            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app]:
+            for app in [claims_app, docver_app, archrev_app, jfrp_app, mca_app, gov_app, openai_app]:
                 if app not in admin.applications:
                     admin.applications.append(app)
         db.commit()
