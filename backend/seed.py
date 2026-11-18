@@ -271,6 +271,7 @@ def seed_catalog(samples: bool):
         old_ap = db.query(Queue).filter(Queue.topic == "workflow.hil.openai.ap-payments").first()
         if old_ap and not db.query(Queue).filter(Queue.topic == "hil.requests.openai-ap-payments").first():
             old_ap.topic = "hil.requests.openai-ap-payments"
+            db.flush()   # the session has autoflush off: the check below must see the moved queue, or it inserts a second
         for q in queues_data:
             if not db.query(Queue).filter(Queue.topic == q["topic"]).first():
                 db.add(Queue(**q))
